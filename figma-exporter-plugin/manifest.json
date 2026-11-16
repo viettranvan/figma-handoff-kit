@@ -1,0 +1,16 @@
+{
+  "name": "Figma Handoff Kit",
+  "id": "sit-figma-ai-exporter",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": [
+    "figma"
+  ],
+  "networkAccess": {
+    "allowedDomains": [
+      "*"
+    ],
+    "reasoning": "Allows exporting frames and design specs to local bridge server"
+  }
+}

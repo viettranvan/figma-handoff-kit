@@ -1,0 +1,21 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+test('ZIP writer includes UTF-8 names, binary bytes, CRC and central directory', async () => {
+ const html = readFileSync(new URL('../figma-exporter-plugin/ui.html', import.meta.url), 'utf8');
+ const source = html.slice(html.indexOf('    function makeZip('), html.indexOf('    const zipName'));
+ const makeZip = vm.runInNewContext(source + '\nmakeZip', { TextEncoder, Uint8Array, DataView, Blob });
+ const entries = new Map([['thử/spec.txt',new TextEncoder().encode('123456789')], ['icon.png',new Uint8Array([0,255,1])]]);
+ const data = new Uint8Array(await makeZip(entries).arrayBuffer());
+ const view = new DataView(data.buffer);
+ assert.equal(view.getUint32(0,true),0x04034b50);
+ assert.equal(view.getUint16(6,true),0x800);
+ assert.equal(view.getUint32(14,true),0xcbf43926);
+ const end = data.length - 22;
+ assert.equal(view.getUint32(end,true),0x06054b50);
+ assert.equal(view.getUint16(end+10,true),2);
+ const central = view.getUint32(end+16,true);
+ assert.equal(view.getUint32(central,true),0x02014b50);
+ assert.equal(new TextDecoder().decode(data.slice(30,30+view.getUint16(26,true))),'thử/spec.txt');
+});

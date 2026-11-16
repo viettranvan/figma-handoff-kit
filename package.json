@@ -1,0 +1,35 @@
+{
+  "name": "@viettran210/figma-handoff-kit",
+  "version": "0.2.2",
+  "description": "Figma plugin and local CLI for exporting design specs, assets, and tokens",
+  "type": "module",
+  "bin": {
+    "figma-handoff": "bin/figma-export.js",
+    "figma-export": "bin/figma-export.js"
+  },
+  "files": [
+    "bin",
+    "figma-exporter-plugin",
+    "README.md",
+    "CHANGELOG.md",
+    "PUBLISHING.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "check:release": "npm test && npm pack --dry-run"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.9.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/viettranvan/figma-handoff-kit.git"
+  },
+  "homepage": "https://github.com/viettranvan/figma-handoff-kit#readme",
+  "bugs": {
+    "url": "https://github.com/viettranvan/figma-handoff-kit/issues"
+  }
+}

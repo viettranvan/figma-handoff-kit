@@ -1,0 +1,20 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+const cli = fileURLToPath(new URL('../bin/figma-export.js', import.meta.url));
+test('plugin setup works outside a project and locates installed files', () => {
+ const run = (...args) => spawnSync(process.execPath, [cli, 'plugin', ...args], { cwd: tmpdir(), encoding: 'utf8' });
+ const path = run('--path');
+ assert.equal(path.status, 0, path.stderr);
+ assert.ok(existsSync(path.stdout.trim()));
+ assert.match(path.stdout.trim(), /figma-exporter-plugin[/\\]manifest.json$/);
+ const setup = run();
+ assert.equal(setup.status, 0, setup.stderr);
+ assert.match(setup.stdout, /Import plugin from manifest/);
+ assert.equal(run('--unknown').status, 1);
+ assert.equal(run('--open', '--path').status, 1);
+ assert.match(run('--help').stdout, /USAGE/);
+});

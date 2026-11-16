@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Figma Handoff Kit</title>
+  <style>
+    /* AAP light theme snapshot; see design-tokens.md. No runtime dependency on the app. */
+    :root {
+      --spacing: 4px;
+      --color-bg-brand-primary: var(--color-brand-50);
+      --color-bg-brand-secondary: var(--color-brand-100);
+      --color-bg-brand-solid: var(--color-brand-600);
+      --color-bg-brand-solid_hover: var(--color-brand-700);
+      --color-bg-error-primary: var(--color-red-50);
+      --color-bg-primary: var(--color-white);
+      --color-bg-secondary: var(--color-neutral-50);
+      --color-bg-success-primary: var(--color-green-50);
+      --color-bg-tertiary: var(--color-neutral-100);
+      --color-blue-400: rgb(96 165 250);
+      --color-border-brand: var(--color-brand-500);
+      --color-border-primary: var(--color-neutral-300);
+      --color-border-secondary: var(--color-neutral-200);
+      --color-brand-100: rgb(231 236 244);
+      --color-brand-50: rgb(243 246 251);
+      --color-brand-500: rgb(67 78 93);
+      --color-brand-600: rgb(32 42 56);
+      --color-brand-700: rgb(18 27 40);
+      --color-brand-900: rgb(6 12 22);
+      --color-fg-error-primary: var(--color-red-600);
+      --color-fg-success-primary: var(--color-green-600);
+      --color-green-400: rgb(74 222 128);
+      --color-green-50: rgb(240 253 244);
+      --color-green-600: rgb(22 163 74);
+      --color-green-700: rgb(21 128 61);
+      --color-neutral-100: rgb(245 245 245);
+      --color-neutral-200: rgb(229 229 229);
+      --color-neutral-300: rgb(212 212 212);
+      --color-neutral-400: rgb(163 163 163);
+      --color-neutral-50: rgb(250 250 250);
+      --color-neutral-600: rgb(82 82 82);
+      --color-neutral-700: rgb(64 64 64);
+      --color-neutral-900: rgb(23 23 23);
+      --color-red-400: rgb(255 104 86);
+      --color-red-50: rgb(254 242 240);
+      --color-red-600: rgb(209 23 15);
+      --color-red-700: rgb(178 14 8);
+      --color-text-brand-primary: var(--color-brand-900);
+      --color-text-brand-secondary: var(--color-brand-700);
+      --color-text-error-primary: var(--color-red-600);
+      --color-text-primary: var(--color-neutral-900);
+      --color-text-secondary: var(--color-neutral-700);
+      --color-text-tertiary: var(--color-neutral-600);
+      --color-white: rgb(255 255 255);
+      --font-body: var(--font-sans);
+      --font-mono: ui-monospace, 'Roboto Mono', SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
+      --font-sans: 'IBM Plex Sans', -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+      --font-weight-semibold: 600;
+      --radius-full: 9999px;
+      --radius-md: 8px;
+      --radius-sm: 6px;
+      --radius-xs: 4px;
+      --text-sm: calc(var(--spacing) * 3.5);
+      --text-xs: calc(var(--spacing) * 3);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: var(--font-body); }
+    body { padding: 16px; background: var(--color-bg-secondary); color: var(--color-text-primary); font-size: 13px; line-height: 1.4; }
+    
+    .header { margin-bottom: 12px; }
+    .title { font-size: 16px; font-weight: 700; color: var(--color-text-primary); display: flex; align-items: center; gap: 6px; }
+    .subtitle { font-size: 12px; color: var(--color-text-tertiary); margin-top: 2px; }
+
+    .status-card {
+      background: var(--color-bg-primary); border: 1px solid var(--color-border-secondary); border-radius: var(--radius-md);
+      padding: 10px 12px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .badge { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; font-size: 11px; padding: 3px 8px; border-radius: var(--radius-full); }
+    .badge-online { background: var(--color-bg-success-primary); color: var(--color-green-700); }
+    .badge-offline { background: var(--color-bg-error-primary); color: var(--color-red-700); }
+
+    .features-banner {
+      background: var(--color-bg-brand-primary); border: 1px solid var(--color-border-brand); border-radius: var(--radius-sm); padding: 8px 10px; margin-bottom: 12px;
+      font-size: 11px; color: var(--color-text-brand-secondary); line-height: 1.4;
+    }
+    .features-banner strong { color: var(--color-text-brand-primary); }
+
+    .scope-box {
+      background: var(--color-bg-primary); border: 1px solid var(--color-border-secondary); border-radius: var(--radius-md);
+      padding: 12px; margin-bottom: 12px;
+    }
+    .scope-label { font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--color-text-tertiary); margin-bottom: 8px; }
+    
+    .radio-option {
+      display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; cursor: pointer;
+      padding: 6px; border-radius: var(--radius-sm); transition: background 0.1s;
+    }
+    .radio-option:hover { background: var(--color-bg-tertiary); }
+    .radio-option input[type=\"radio\"] { margin-top: 2px; }
+    .radio-title { font-weight: 600; color: var(--color-text-secondary); font-size: 12px; }
+    .radio-desc { font-size: 11px; color: var(--color-text-tertiary); margin-top: 1px; }
+
+    .control-group { margin-bottom: 12px; }
+    .control-label { font-size: 12px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px; display: block; }
+    select {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--color-border-primary); border-radius: var(--radius-sm);
+      background: var(--color-bg-primary); font-size: 12px; color: var(--color-text-primary); outline: none;
+    }
+
+    button.btn-primary {
+      width: 100%; padding: 10px 14px; background: var(--color-bg-brand-solid); color: var(--color-bg-primary);
+      border: none; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px; transition: background 0.15s;
+    }
+    button.btn-primary:hover:not(:disabled) { background: var(--color-bg-brand-solid_hover); }
+    button.btn-primary:disabled { background: var(--color-neutral-400); cursor: not-allowed; }
+
+    .logs-container {
+      margin-top: 12px; background: var(--color-text-primary); border-radius: var(--radius-sm); padding: 10px;
+      height: 180px; overflow-y: auto; font-family: var(--font-mono);
+      font-size: 11px; color: var(--color-border-secondary);
+    }
+    .log-entry { margin-bottom: 4px; word-break: break-all; }
+    .log-success { color: var(--color-green-400); }
+    .log-info { color: var(--color-blue-400); }
+    .log-error { color: var(--color-red-400); }
+
+    .tip { margin-top: 10px; font-size: 11px; color: var(--color-text-tertiary); text-align: center; }
+    body { font-size:13px; }
+    .header { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    h1 { font-size:18px; }
+    .language { font-size:12px; }
+    .language select { width:auto; display:block; padding:6px; }
+    .destination { background:white; padding:12px; border:1px solid var(--color-border-primary); border-radius:var(--radius-md); margin-bottom:12px; }
+    .destination-heading { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; margin-bottom:8px; }
+    #project-name, #output-directory { display:block; overflow-wrap:anywhere; }
+    #output-directory { margin-top:4px; color:var(--color-text-tertiary); font-size:12px; }
+    #connection-error { color:var(--color-text-error-primary); margin-top:6px; }
+    .radio-desc,.scope-label,.badge,.logs-container { font-size:12px; }
+    .radio-title,.control-label { font-size:13px; }
+    .radio-option { min-height:44px; }
+    :where(button,select,input,summary,[tabindex]):focus-visible { outline:3px solid var(--color-bg-brand-solid); outline-offset:3px; }
+    .actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+    .actions button { background:white; color:var(--color-text-secondary); border:1px solid var(--color-neutral-400); padding:7px 10px; border-radius:5px; cursor:pointer; }
+    summary { cursor:pointer; padding:10px 0; font-weight:600; }
+    .help { color:var(--color-text-tertiary); margin-top:8px; }
+    #progress { min-height:36px; padding:8px 0; }
+    .logs-container { margin-top:8px; height:150px; }
+    .log-entry { overflow-wrap:anywhere; word-break:normal; font-family:var(--font-mono); }
+    #btn-export { margin-top:12px; }
+    [hidden] { display:none !important; }
+    .header { margin-bottom:16px; }
+    .language-toggle { display:inline-flex; gap:6px; align-items:center; font-size:11px; font-weight:600; color:var(--color-text-tertiary); cursor:pointer; min-height:32px; position:relative; }
+    .language-toggle input { position:absolute; width:100%; height:100%; opacity:0; cursor:pointer; }
+    .toggle-track { width:32px; height:18px; background:var(--color-neutral-300); border-radius:12px; padding:2px; pointer-events:none; }
+    .toggle-track::before { content:""; display:block; width:14px; height:14px; background:white; border-radius:50%; transition:transform .15s; }
+    .language-toggle input:checked + .toggle-track { background:var(--color-bg-brand-solid); }
+    .language-toggle input:checked + .toggle-track::before { transform:translateX(14px); }
+    .language-toggle:has(input:focus-visible) { outline:3px solid var(--color-bg-brand-solid); outline-offset:3px; border-radius:var(--radius-xs); }
+    .destination { background:transparent; padding:10px 12px; }
+    .destination-heading { margin-bottom:4px; font-size:12px; color:var(--color-text-tertiary); }
+    .badge-online::before { content:""; width:6px; height:6px; background:var(--color-fg-success-primary); border-radius:50%; }
+    .badge-offline::before { content:""; width:6px; height:6px; background:var(--color-fg-error-primary); border-radius:50%; }
+    .destination-path summary { font-size:12px; font-weight:400; padding:3px 0 0; color:var(--color-text-tertiary); }
+    .scope-box { padding:12px; }
+    .scope-label { font-size:11px; letter-spacing:.04em; }
+    .radio-option { margin-bottom:4px; }
+    .advanced { border-bottom:1px solid var(--color-border-secondary); }
+    .advanced > summary,.log-panel > summary,.help > summary { font-size:12px; color:var(--color-text-tertiary); }
+    .advanced .control-group { margin-top:8px; }
+    .log-panel,.help { margin-top:4px; }
+    .actions button { font-size:12px; padding:5px 8px; }
+    @media (prefers-reduced-motion:reduce) { .toggle-track::before { transition:none; } }
+    .export-options { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin:8px 0 12px; }
+    .scale-options { border:0; display:flex; gap:8px; align-items:center; min-width:0; }
+    .scale-options legend { float:left; font-size:12px; color:var(--color-text-tertiary); margin-right:8px; padding:8px 0; }
+    .segments { display:flex; border:1px solid var(--color-border-primary); border-radius:var(--radius-sm); overflow:hidden; }
+    .segments label { position:relative; cursor:pointer; }
+    .segments input { position:absolute; opacity:0; width:100%; height:100%; }
+    .segments span { display:block; padding:8px 12px; font-size:12px; background:white; }
+    .segments input:checked + span { background:var(--color-bg-brand-secondary); color:var(--color-bg-brand-solid_hover); font-weight:700; }
+    .segments input:focus-visible + span { box-shadow:inset 0 0 0 2px var(--color-bg-brand-solid); }
+    .segments input:disabled + span { opacity:.5; cursor:not-allowed; }
+    .force-toggle { position:relative; display:flex; gap:8px; align-items:center; min-height:36px; font-size:12px; cursor:pointer; color:var(--color-text-tertiary); }
+    .force-toggle input { position:absolute; right:0; width:32px; height:24px; opacity:0; }
+    .force-toggle input:checked + .toggle-track { background:var(--color-bg-brand-solid); }
+    .force-toggle input:checked + .toggle-track::before { transform:translateX(14px); }
+    .force-toggle:has(input:focus-visible) { outline:2px solid var(--color-bg-brand-solid); outline-offset:3px; border-radius:var(--radius-xs); }
+    .force-toggle input:disabled + .toggle-track { opacity:.5; }
+    .actions .icon-button { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; padding:0; background:transparent; border-color:transparent; }
+    .actions .icon-button:hover { background:var(--color-border-secondary); }
+
+    .logs-container { background:var(--color-neutral-900); color:var(--color-neutral-200); }
+    .segments span { background:var(--color-bg-primary); }
+    .toggle-track::before { background:var(--color-white); }
+    .log-panel { margin-top:12px; border:1px solid var(--color-border-secondary); border-radius:var(--radius-sm); }
+    .log-toolbar { position:sticky; top:0; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 8px; background:var(--color-bg-secondary); border-radius:var(--radius-sm) var(--radius-sm) 0 0; }
+    .log-toolbar strong { font-size:12px; color:var(--color-text-secondary); }
+    .log-toolbar .actions { margin:0; flex-wrap:nowrap; }
+    .log-panel .logs-container { margin-top:0; border-radius:0 0 var(--radius-sm) var(--radius-sm); }
+    .help-steps { padding:0 0 0 20px; margin:4px 0 12px; }
+    .help-steps li { padding:4px 0; }
+    .help-steps code { display:block; padding:8px; margin-top:6px; background:var(--color-bg-tertiary); border-radius:var(--radius-xs); user-select:all; }
+    .storage-note { padding:10px; background:var(--color-bg-brand-primary); border-radius:var(--radius-sm); }
+    .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); z-index:10; max-width:calc(100% - 32px); padding:10px 16px; background:var(--color-neutral-900); color:var(--color-white); border-radius:var(--radius-md); box-shadow:0 4px 16px #0003; font-size:13px; }
+    dialog { margin:auto; padding:20px; width:calc(100% - 32px); max-width:440px; border:1px solid var(--color-border-primary); border-radius:var(--radius-md); background:var(--color-bg-primary); color:var(--color-text-primary); }
+    dialog::backdrop { background:#0006; }
+    dialog h2 { font-size:16px; margin-bottom:8px; }
+    dialog textarea { width:100%; height:180px; margin:12px 0; padding:8px; font-family:var(--font-mono); }
+    dialog button { padding:8px 16px; cursor:pointer; }
+    .help { margin-top:12px; border-top:1px solid var(--color-border-secondary); padding-top:4px; }
+    .help-steps { list-style:none; counter-reset:setup; margin:6px 0 12px; padding:0; }
+    .help-steps li { counter-increment:setup; position:relative; padding:6px 0 12px 34px; }
+    .help-steps li::before { content:counter(setup); position:absolute; left:0; top:6px; width:24px; height:24px; display:grid; place-items:center; border-radius:50%; background:var(--color-bg-brand-secondary); color:var(--color-text-brand-secondary); font-size:12px; font-weight:600; }
+    .help-steps strong { display:block; font-size:13px; line-height:1.5; color:var(--color-text-primary); }
+    .help-steps p { margin-top:3px; font-size:12px; line-height:1.65; color:var(--color-text-tertiary); }
+    .help-steps code { font-family:var(--font-mono); font-size:12px; border:1px solid var(--color-border-secondary); background:var(--color-bg-primary); padding:9px 12px; }
+    .storage-note { font-size:12px; line-height:1.65; padding:8px 0; background:transparent; border-top:1px solid var(--color-border-secondary); color:var(--color-text-tertiary); }
+    .destination { position:relative; }
+    .destination-heading { padding-right:38px; min-height:28px; align-items:center; }
+    .retry-action { position:absolute; right:8px; top:8px; margin:0; }
+    #connection-actions { display:flex; align-items:center; justify-content:space-between; background:var(--color-bg-tertiary); border:1px solid var(--color-border-secondary); border-radius:var(--radius-sm); padding:4px 6px 4px 10px; margin-top:10px; }
+    #connection-actions code { font-family:var(--font-mono); font-size:12px; user-select:all; }
+    #connection-error { font-size:12px; line-height:1.6; color:var(--color-text-secondary); }
+    .icon-button { position:relative; }
+    .icon-button::after { content:attr(data-tooltip); position:absolute; right:0; bottom:calc(100% + 6px); z-index:20; width:max-content; max-width:240px; white-space:normal; text-align:left; padding:6px 9px; font-size:12px; line-height:1.4; border-radius:var(--radius-xs); background:var(--color-neutral-900); color:var(--color-white); box-shadow:0 2px 8px #0003; opacity:0; visibility:hidden; pointer-events:none; }
+    .icon-button:hover::after,.icon-button:focus-visible::after { opacity:1; visibility:visible; }
+    .retry-action .icon-button::after { bottom:auto; top:calc(100% + 6px); }
+    .help-command { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:7px; padding:4px 6px 4px 10px; background:var(--color-bg-primary); border:1px solid var(--color-border-secondary); border-radius:var(--radius-sm); }
+    .help-command code { display:block; margin:0; padding:0; border:0; background:transparent; font-family:var(--font-mono); font-size:12px; overflow-wrap:anywhere; user-select:all; }
+    .help-command .icon-button { display:inline-flex; flex-shrink:0; align-items:center; justify-content:center; width:32px; height:32px; padding:0; border:0; border-radius:var(--radius-xs); background:transparent; color:var(--color-text-secondary); cursor:pointer; }
+    .help-command .icon-button:hover { background:var(--color-bg-tertiary); }
+    .help-steps { margin-bottom:8px; }
+    .help-steps li { padding-bottom:10px; }
+    .scope-label { text-transform:none; letter-spacing:0; font-size:13px; color:var(--color-text-primary); }
+    .export-options { display:grid; grid-template-columns:1fr; gap:5px; margin-bottom:0; }
+    .scale-options { display:flex; align-items:center; }
+    .scale-options legend { margin-right:auto; }
+    .force-toggle { justify-content:space-between; margin-top:8px; font-size:13px; color:var(--color-text-secondary); }
+    .option-hint { font-size:12px; line-height:1.5; color:var(--color-text-tertiary); margin:2px 0 6px; }
+    .scope-label { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .help-trigger,.popover-header .icon-button { display:inline-flex; align-items:center; justify-content:center; width:32px; height:32px; border:0; border-radius:var(--radius-xs); background:transparent; color:var(--color-text-tertiary); cursor:pointer; }
+    .help-trigger:hover,.popover-header .icon-button:hover { background:var(--color-bg-tertiary); }
+    #options-help { position:fixed; inset:0; margin:auto; width:calc(100% - 32px); max-width:400px; max-height:calc(100% - 48px); overflow-y:auto; padding:14px; border:1px solid var(--color-border-primary); border-radius:var(--radius-md); background:var(--color-bg-primary); color:var(--color-text-primary); box-shadow:0 8px 30px #0003; }
+    .popover-header { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    #options-help dt { margin-top:12px; font-size:13px; font-weight:600; }
+    #options-help dd { margin:4px 0 0; font-size:12px; line-height:1.65; color:var(--color-text-secondary); }
+    body { padding:14px; line-height:1.5; }
+    .header { margin-bottom:14px; }
+    .destination { padding:10px 12px; margin-bottom:12px; }
+    .scope-box { padding:10px; margin-bottom:8px; }
+    .scope-label { padding:0 2px; margin-bottom:4px; font-weight:600; }
+    .radio-option { padding:9px 10px; margin-bottom:3px; border:1px solid transparent; gap:10px; }
+    .radio-option:has(input:checked) { background:var(--color-bg-brand-primary); border-color:var(--color-border-secondary); }
+    .radio-option input { flex-shrink:0; margin-top:4px; accent-color:var(--color-bg-brand-solid); }
+    .radio-option > div { min-width:0; }
+    .radio-title { font-size:13px; line-height:1.5; overflow-wrap:anywhere; font-weight:500; }
+    .radio-option:has(input:checked) .radio-title { font-weight:600; }
+    .radio-desc { line-height:1.5; margin-top:2px; color:var(--color-text-tertiary); }
+    .export-options { background:var(--color-bg-primary); border:1px solid var(--color-border-secondary); border-radius:var(--radius-md); padding:0 12px; gap:0; margin-top:10px; }
+    .scale-options { min-height:46px; }
+    .scale-options legend { padding:0; font-size:12px; }
+    .segments span { padding:6px 11px; }
+    .force-toggle { margin:0; min-height:46px; border-top:1px solid var(--color-border-secondary); font-size:12px; }
+    #force-hint:not([hidden]) { margin:6px 2px; }
+    #btn-export { min-height:40px; }
+    #options-help { padding:0; max-width:380px; box-shadow:0 12px 36px #0003; }
+    #options-help::backdrop { background:rgb(0 0 0 / .12); }
+    .popover-header { position:sticky; top:0; padding:12px 16px; background:var(--color-bg-primary); border-bottom:1px solid var(--color-border-secondary); }
+    .popover-header > strong { font-size:14px; }
+    .explain-section { margin:0 16px; padding:14px 0; }
+    .explain-section + .explain-section { border-top:1px solid var(--color-border-secondary); }
+    .explain-section h3 { font-size:13px; margin-bottom:8px; }
+    .explain-section p { font-size:12px; line-height:1.65; color:var(--color-text-secondary); }
+    .explain-list { list-style:none; padding:0; display:grid; gap:10px; }
+    .explain-list li { display:grid; grid-template-columns:100px 1fr; gap:10px; font-size:12px; line-height:1.6; }
+    .explain-list strong { font-weight:500; color:var(--color-text-primary); }
+    .explain-list span { color:var(--color-text-tertiary); }
+    .scale-explainer { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+    .scale-explainer > div { display:flex; flex-direction:column; gap:3px; padding:8px; background:var(--color-bg-secondary); border-radius:var(--radius-sm); }
+    .scale-explainer strong { font-size:13px; }
+    .scale-explainer span { font-size:12px; color:var(--color-text-tertiary); }
+    .explain-warning { margin-top:8px; padding:8px 10px; background:var(--color-bg-brand-primary); border-radius:var(--radius-sm); }
+    /* Compact controls: one hierarchy, minimal decoration. */
+    .destination { background:transparent; border:0; border-bottom:1px solid var(--color-border-secondary); border-radius:0; padding:0 0 12px; }
+    .retry-action { top:0; right:0; }
+    .scope-box { border:0; background:transparent; padding:0; }
+    .scope-label { margin-bottom:2px; }
+    .radio-option { padding:7px 8px; }
+    .radio-option:has(input:checked) { border-color:transparent; }
+    .export-options { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; border:0; border-top:1px solid var(--color-border-secondary); border-radius:0; padding:8px 0 0; background:transparent; margin-top:8px; }
+    .scale-options { min-height:34px; }
+    .scale-options legend { margin-right:8px; }
+    .force-toggle { min-height:34px; border:0; gap:8px; }
+    .log-panel { margin-top:10px; }
+    #options-help { max-width:350px; }
+    .popover-header { padding:10px 12px; }
+    .explain-section { margin:0 12px; padding:10px 0; }
+    .explain-list { gap:6px; }
+    .explain-list li { grid-template-columns:88px 1fr; gap:8px; }
+    .scale-explainer { display:flex; justify-content:space-between; gap:12px; }
+    .scale-explainer > div { padding:0; background:transparent; border-radius:0; }
+    .explain-warning { padding:0; background:transparent; border-radius:0; margin-top:4px; }
+    #force-hint { text-align:right; font-size:11px; font-style:italic; line-height:1.5; color:var(--color-text-brand-secondary); margin:6px 0 8px; }
+    #force-hint::before { content:"* "; font-style:normal; }
+    .scope-label { color:var(--color-text-brand-secondary); font-weight:700; font-size:14px; }
+    .scope-label > span { border-left:3px solid var(--color-bg-brand-solid); padding-left:8px; }
+    .scope-label { background:var(--color-bg-brand-secondary); border-radius:var(--radius-sm); padding:6px 8px; margin-bottom:6px; }
+    .scope-box { background:var(--color-bg-brand-primary); border:1px solid var(--color-border-secondary); border-radius:var(--radius-md); padding:10px; }
+    .scope-label { background:transparent; padding:0 2px; }
+    .radio-option:has(input:checked) { background:var(--color-bg-primary); border-color:var(--color-border-primary); }
+    .delivery-options { display:flex; gap:16px; border:0; padding:0; margin:10px 0 4px; }
+    .delivery-options legend { font-size:12px; font-weight:600; margin-bottom:6px; }
+    .delivery-options label { display:flex; gap:6px; align-items:center; padding:6px 0; cursor:pointer; }
+    #zip-download { display:block; padding:8px 0; color:var(--color-text-brand-secondary); }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <h1>Figma Handoff Kit</h1>
+    <label class="language-toggle"><span>VI</span><input id="language-switch" type="checkbox" role="switch" aria-label="Use English"><span class="toggle-track" aria-hidden="true"></span><span>EN</span></label>
+  </header>
+  <fieldset class="delivery-options"><legend data-i18n="deliveryTitle"></legend><label><input type="radio" name="delivery" value="zip" checked><span data-i18n="deliveryZip"></span></label><label><input type="radio" name="delivery" value="local"><span data-i18n="deliveryLocal"></span></label></fieldset>
+  <label id="sync-control"><input type="checkbox" id="allow-sync"> <span data-i18n="allowSync"></span></label>
+  <p id="delivery-note" class="option-hint"></p>
+  <section id="local-destination" class="destination" aria-labelledby="destination-title">
+    <div class="destination-heading"><strong id="destination-title" data-i18n="destination">Export tới</strong><span id="server-badge" class="badge badge-offline" role="status">…</span></div>
+    <div id="retry-action" class="actions retry-action" hidden><button id="retry" type="button" class="icon-button" data-icon-label="retry"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 8a7 7 0 0 1 11-2l3 6M4 12l3 6a7 7 0 0 0 11-2"/></svg></button></div>
+    <strong id="project-name">…</strong>
+    <details class="destination-path"><summary data-i18n="pathTitle">Thư mục lưu</summary><code id="output-directory">…</code></details>
+    <p id="connection-error" role="status"></p>
+    <div class="actions" id="connection-actions" hidden><code>figma-handoff serve</code><button id="copy-command" type="button" class="icon-button" data-icon-label="copyCommand"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></svg></button></div>
+  </section>
+  <div class="scope-box">
+    <div class="scope-label"><span data-i18n="s5">Phạm vi xuất dữ liệu (Export Scope)</span><button type="button" id="options-help-button" class="icon-button help-trigger" data-icon-label="optionsHelp" popovertarget="options-help" aria-controls="options-help" aria-expanded="false"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 .5c0 1.5-2.5 1.7-2.5 3.5M12 16v1"/></svg></button></div>
+    
+    <label class="radio-option">
+      <input type="radio" name="export-scope" value="current_page" checked>
+      <div>
+        <div class="radio-title" id="page-scope-title"><span data-i18n="s6">Toàn bộ Page này</span></div>
+        <div class="radio-desc" id="page-scope-desc"><span data-i18n="s7">Tự động duyệt tất cả sections & screens trên page hiện tại</span></div>
+      </div>
+    </label>
+
+    <label class="radio-option">
+      <input type="radio" name="export-scope" value="selection">
+      <div>
+        <div class="radio-title" id="sel-scope-title"><span data-i18n="s8">Chỉ mục đang chọn trên Canvas</span></div>
+        <div class="radio-desc" id="sel-scope-desc"><span data-i18n="s9">Chưa chọn mục nào</span></div>
+      </div>
+    </label>
+
+    <label class="radio-option">
+      <input type="radio" name="export-scope" value="all_pages">
+      <div>
+        <div class="radio-title"><span data-i18n="s10">Tất cả các Pages trong file</span></div>
+        <div class="radio-desc" id="all-pages-desc"><span data-i18n="s11">Xuất toàn bộ project (tự động bỏ qua Trash)</span></div>
+      </div>
+    </label>
+  </div>
+
+  <div class="export-options">
+    <fieldset class="scale-options"><legend data-i18n="scaleShort">Độ nét</legend><div class="segments">
+      <label><input type="radio" name="scale" value="1"><span>1×</span></label>
+      <label><input type="radio" name="scale" value="2" checked><span>2×</span></label>
+      <label><input type="radio" name="scale" value="3"><span>3×</span></label>
+    </div></fieldset>
+
+    <label class="force-toggle" id="force-control"><span data-i18n="forceShort">Xuất lại tất cả</span><input type="checkbox" id="force-export" role="switch" aria-describedby="force-hint"><span class="toggle-track" aria-hidden="true"></span></label>
+  </div>
+  <p class="option-hint" id="force-hint" aria-live="polite"></p>
+  <button id="btn-export" class="btn-primary" disabled>
+    <span data-i18n="s17">🚀 Bắt đầu xuất sang AI Folder</span>
+  </button>
+
+  <a id="zip-download" hidden download="figma-handoff.zip" data-i18n="downloadReady"></a>
+  <p id="progress" role="status" aria-live="polite"></p>
+  <section class="log-panel" aria-labelledby="log-title">
+    <div class="log-toolbar"><strong id="log-title" data-i18n="logsTitle">Log chi tiết</strong>
+    <div class="actions"><button id="copy-log" type="button" class="icon-button" data-icon-label="copyLog"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></svg></button><button id="clear-log" type="button" class="icon-button" data-icon-label="clearLog"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg></button></div>
+    </div>
+    <div class="logs-container" id="logs" role="log" aria-label="Export log" tabindex="0"></div>
+  </section>
+  <details class="help"><summary data-i18n="helpTitle">Kết nối với máy của bạn</summary>
+    <p data-i18n="syncHelp"></p><p data-i18n="installTitle"></p><div class="help-command"><code>npm install -g @viettran210/figma-handoff-kit</code><button id="copy-install" class="icon-button" type="button" data-icon-label="copyCommand">⧉</button></div><ol class="help-steps"><li><strong data-i18n="helpRunTitle"></strong><p data-i18n="helpRun"></p><div class="help-command"><code>figma-handoff serve</code><button id="copy-help-command" type="button" class="icon-button" data-icon-label="copyCommand"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></svg></button></div></li><li><strong data-i18n="helpProjectTitle"></strong><p data-i18n="helpProject"></p></li><li><strong data-i18n="helpKeepTitle"></strong><p data-i18n="helpKeep"></p></li></ol>
+    <p class="storage-note" data-i18n="helpStorage"></p>
+  </details>
+  <div id="action-feedback" class="toast" role="status" aria-live="polite" hidden></div>
+  <div id="options-help" popover role="dialog" aria-labelledby="options-help-title">
+    <header class="popover-header"><strong id="options-help-title" data-i18n="optionsHelp"></strong><button type="button" class="icon-button" data-icon-label="closeCopy" popovertarget="options-help" popovertargetaction="hide"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header>
+    <section class="explain-section"><h3 data-i18n="s5"></h3><ul class="explain-list"><li><strong data-i18n="scopePageTitle"></strong><span data-i18n="scopePageText"></span></li><li><strong data-i18n="scopeSelectedTitle"></strong><span data-i18n="scopeSelectedText"></span></li><li><strong data-i18n="scopeAllTitle"></strong><span data-i18n="scopeAllText"></span></li></ul></section>
+    <section class="explain-section"><h3 data-i18n="scaleShort"></h3><div class="scale-explainer"><div><strong>1×</strong><span data-i18n="scaleOne"></span></div><div><strong>2×</strong><span data-i18n="scaleTwo"></span></div><div><strong>3×</strong><span data-i18n="scaleThree"></span></div></div></section>
+    <section class="explain-section"><h3 data-i18n="forceShort"></h3><p data-i18n="forceOff"></p><p class="explain-warning" data-i18n="forceOn"></p></section>
+  </div>
+  <dialog id="copy-dialog"><h2 data-i18n="manualCopyTitle"></h2><p data-i18n="manualCopyHint"></p><textarea id="manual-copy" readonly aria-label="Content to copy"></textarea><button id="close-copy" type="button" data-i18n="closeCopy"></button></dialog>
+
+  <script>
+    let language = "vi";
+    const translations = {"s0": {"vi": "💎 Figma Handoff Kit (Pixel-Perfect 100%)", "en": "💎 Figma Handoff Kit"}, "s1": {"vi": "Bóc tách toàn bộ DOM Tree, CSS chính xác & Reusable Components", "en": "Export design structure, CSS and reusable components"}, "s2": {"vi": "🎯 <strong>Pixel-Perfect (100%):</strong> Trích xuất chuẩn từng dòng CSS, flexbox, gaps, borders, shadows & nhận diện component dùng chung để Agent tái sử dụng thay vì tạo mới.", "en": "🎯 Extract CSS, layout, spacing, borders, shadows and shared components for reuse."}, "s3": {"vi": "Local Bridge Server:", "en": "Local bridge:"}, "s4": {"vi": "🔴 Đang kiểm tra...", "en": "🔴 Checking connection…"}, "s5": {"vi": "Phạm vi xuất dữ liệu (Export Scope)", "en": "Export scope"}, "s6": {"vi": "Toàn bộ Page này", "en": "Current page"}, "s7": {"vi": "Tự động duyệt tất cả sections & screens trên page hiện tại", "en": "Export sections and screens on the current page"}, "s8": {"vi": "Chỉ mục đang chọn trên Canvas", "en": "Selected items only"}, "s9": {"vi": "Chưa chọn mục nào", "en": "Nothing selected"}, "s10": {"vi": "Tất cả các Pages trong file", "en": "All pages in this file"}, "s11": {"vi": "Xuất toàn bộ project (tự động bỏ qua Trash)", "en": "Export all pages (automatically skip Trash)"}, "s12": {"vi": "Độ phân giải ảnh (Screenshot Scale):", "en": "Screenshot scale:"}, "s13": {"vi": "2x Retina (Khuyên dùng - Chuẩn nét cho Vision AI)", "en": "2x Retina (recommended for Vision AI)"}, "s14": {"vi": "1x Standard (Dung lượng nhẹ)", "en": "1x Standard (smaller files)"}, "s15": {"vi": "3x Ultra HD", "en": "3x Ultra HD"}, "s16": {"vi": "Force export (bỏ qua cache)", "en": "Force export (ignore cache)"}, "s17": {"vi": "🚀 Bắt đầu xuất sang AI Folder", "en": "🚀 Export designs"}, "s18": {"vi": "[Ready] Chờ lệnh xuất dữ liệu Pixel-Perfect...", "en": "[Ready] Waiting to export designs…"}, "s19": {"vi": "Chưa kết nối project", "en": "No project connected"}, "s20": {"vi": "Chạy <code>figma-handoff serve</code> và chọn project trên cùng máy đang mở Figma Web/Desktop. Giữ Terminal chạy trong lúc export. Dữ liệu lưu local, không tải lên server cloud.", "en": "Run <code>figma-handoff serve</code> and select a project on the same computer as Figma Web/Desktop. Keep the terminal running during export. Files stay on your computer; they are not uploaded to a cloud server."}, "s21": {"vi": "Thư mục lưu trên máy này:", "en": "Output directory on this computer:"}, "s22": {"vi": "Đang kết nối bridge…", "en": "Connecting to bridge…"}, "s23": {"vi": "Chưa kết nối — chạy figma-handoff serve trên máy này", "en": "Disconnected — run figma-handoff serve on this computer"}, "s24": {"vi": "Chưa xác định", "en": "Not available"}, "s25": {"vi": "🟢 Online (Port 3055)", "en": "🟢 Connected (port 3055)"}, "s26": {"vi": "🔴 Offline (Chạy figma-handoff serve)", "en": "🔴 Offline (run figma-handoff serve)"}, "s27": {"vi": "Chưa chọn mục nào trên canvas", "en": "Nothing selected on the canvas"}, "s28": {"vi": "🎉 Hoàn tất export tới thư mục đã cấu hình.", "en": "🎉 Export completed to the configured directory."}, "s29": {"vi": "Bridge change check failed; reload updated bridge.", "en": "Bridge change check failed; reload updated bridge."}};
+    Object.assign(translations, {
+      scaleShort:{vi:"Độ nét",en:"Scale"}, forceShort:{vi:"Xuất lại tất cả",en:"Re-export all"},
+      advancedTitle:{vi:"Tùy chọn nâng cao",en:"Advanced options"}, pathTitle:{vi:"Thư mục lưu",en:"Output directory"}, destination:{vi:"Export tới",en:"Export destination"}, retry:{vi:"Thử lại",en:"Retry"}, copyCommand:{vi:"Copy lệnh khởi động",en:"Copy start command"},
+      logsTitle:{vi:"Log chi tiết",en:"Detailed log"}, copyLog:{vi:"Copy log",en:"Copy log"}, clearLog:{vi:"Xóa log",en:"Clear log"}, helpTitle:{vi:"Cách kết nối và lưu dữ liệu",en:"Connection and storage help"}
+    });
+    Object.assign(translations, {
+      helpRunTitle:{vi:"Khởi động bridge",en:"Start the bridge"},
+      helpProjectTitle:{vi:"Chọn nơi lưu",en:"Choose the destination"},
+      helpKeepTitle:{vi:"Quay lại Figma và export",en:"Return to Figma and export"},
+      helpRun:{vi:"Chạy lệnh này trong Terminal trên máy đang mở Figma:",en:"Run this command in a terminal on this computer:"},
+      helpProject:{vi:"Chọn project trong Terminal. Kiểm tra project và thư mục đích ở đầu plugin.",en:"Select a project in the terminal. Confirm the destination at the top of this plugin."},
+      helpKeep:{vi:"Chờ trạng thái Đã kết nối rồi bấm Export. Giữ Terminal mở.",en:"Wait for Connected, then export. Keep the terminal open."},
+      helpStorage:{vi:"Lưu trên máy này • Trong thư mục đích đã chọn • Không tải lên cloud",en:"Saved locally • In your selected output directory • No cloud upload"},
+      manualCopyTitle:{vi:"Copy thủ công",en:"Copy manually"}, manualCopyHint:{vi:"Nội dung đã được chọn. Nhấn ⌘C trên Mac hoặc Ctrl+C trên Windows.",en:"Text is selected. Press ⌘C on Mac or Ctrl+C on Windows."}, closeCopy:{vi:"Đóng",en:"Close"}
+    });
+    translations.retry = {vi:"Thử kết nối lại với bridge",en:"Retry bridge connection"};
+    translations.copyCommand = {vi:"Copy lệnh khởi động bridge",en:"Copy bridge start command"};
+    Object.assign(translations, {
+      s5:{vi:"Bạn muốn export phần nào?",en:"What would you like to export?"},
+      s10:{vi:"Mọi trang trong file Figma",en:"Every page in this Figma file"},
+      scaleShort:{vi:"Kích thước ảnh",en:"Screenshot size"},
+      scaleHint:{vi:"1×: file nhỏ · 2×: khuyên dùng · 3×: ảnh lớn, export lâu hơn.",en:"1× smaller files · 2× recommended · 3× larger images, slower export."},
+      forceShort:{vi:"Xuất lại cả màn hình không đổi",en:"Include unchanged screens"}
+    });
+    Object.assign(translations, {
+      optionsHelp:{vi:"Giải thích tùy chọn export",en:"Export options explained"},
+      scopeHelp:{vi:"Trang hiện tại: chỉ trang đang mở. Mục đã chọn: chỉ section hoặc màn hình bạn chọn trên canvas. Mọi trang: toàn file, bỏ qua Trash.",en:"Current page: only the page you have open. Selected items: only sections or screens selected on the canvas. Every page: the whole file, excluding Trash."},
+      forceHelp:{vi:"Mặc định chỉ export màn hình mới hoặc thay đổi. Bật switch để xuất lại cả màn hình không đổi, chỉ trong phạm vi đã chọn; thao tác có thể lâu hơn.",en:"By default, only new or changed screens are exported. Turn this on to also re-export unchanged screens within your selected scope; this can take longer."},
+      s5:{vi:"Phạm vi export",en:"Export scope"}
+    });
+    Object.assign(translations, {
+      scopePageTitle:{vi:"Trang hiện tại",en:"Current page"}, scopePageText:{vi:"Màn hình trong trang đang mở.",en:"Screens on the page you have open."},
+      scopeSelectedTitle:{vi:"Mục đã chọn",en:"Selected items"}, scopeSelectedText:{vi:"Chỉ section hoặc màn hình bạn chọn trên canvas.",en:"Only sections or screens selected on the canvas."},
+      scopeAllTitle:{vi:"Mọi trang",en:"Every page"}, scopeAllText:{vi:"Toàn file Figma, bỏ qua Trash.",en:"The entire Figma file, excluding Trash."},
+      scaleOne:{vi:"File nhỏ",en:"Smaller files"},scaleTwo:{vi:"Khuyên dùng",en:"Recommended"},scaleThree:{vi:"Ảnh lớn hơn",en:"Larger images"},
+      forceOff:{vi:"Tắt: bỏ qua màn hình không thay đổi.",en:"Off: skip screens that have not changed."},
+      forceOn:{vi:"Xuất lại mọi màn hình trong phạm vi đã chọn, kể cả không thay đổi.",en:"On: re-export all screens in the selected scope. This can take longer."}
+    });
+    translations.scaleShort = {vi:"Ảnh",en:"Image"};
+    translations.forceShort = {vi:"Xuất lại tất cả",en:"Re-export all"};
+    translations.forceOff = {vi:"Tắt: chỉ xuất màn hình mới hoặc thay đổi.",en:"Off: export only new or changed screens."};
+    translations.forceOn = {vi:"Bật: xuất lại cả màn hình không đổi trong phạm vi đã chọn.",en:"On: include unchanged screens in the selected scope."};
+    Object.assign(translations, {
+      deliveryTitle:{vi:"Lưu thiết kế",en:"Save designs"},deliveryZip:{vi:"Tải ZIP",en:"Download ZIP"},deliveryLocal:{vi:"Lưu vào project",en:"Save to project"},
+      installTitle:{vi:"Cài CLI một lần (Node.js 20+)",en:"Install the CLI once (Node.js 20+)"}, downloadReady:{vi:"Tải file ZIP",en:"Download ZIP file"}
+    });
+    translations.syncHelp = {vi:"Để sync từ terminal: bật Cho phép CLI sync, giữ plugin và bridge đang mở rồi chạy figma-handoff sync. Lệnh kiểm tra mọi trang ở 2×, bỏ qua màn hình không đổi. Tắt tùy chọn để ngắt quyền sync; bật lại sau mỗi lần khởi động.",en:"To sync from terminal: enable Allow CLI sync, keep the plugin and bridge open, then run figma-handoff sync. It checks all pages at 2× and skips unchanged screens. Disable the option to revoke sync; enable it again after restarting."};
+    translations.allowSync = {vi:"Cho phép CLI sync toàn file này (2×)",en:"Allow CLI sync for this file (all pages, 2×)"};
+    translations.helpTitle = {vi:"Kết nối với máy của bạn",en:"Connect to your computer"};
+    translations.s17 = {vi:"Export thiết kế",en:"Export designs"};
+    const exact = Object.fromEntries(Object.values(translations).map(v => [v.vi, v.en]));
+    const logEntries = [];
+    function translate(value) {
+      if (language === "vi") {
+        const errors = {
+          "Upload failed or timed out; export stopped.": "Gửi dữ liệu lỗi hoặc quá hạn; đã dừng export.",
+          "Notes upload failed or timed out; export stopped.": "Gửi ghi chú lỗi hoặc quá hạn; đã dừng export.",
+          "Change check timed out": "Kiểm tra thay đổi quá hạn.",
+          "Bridge change check failed; reload updated bridge.": "Không kiểm tra được thay đổi; hãy khởi động lại bridge bản mới."
+        };
+        return errors[value] || value;
+      }
+      if (exact[value]) return exact[value];
+      const patterns = [
+        [/^Toàn bộ Page '(.*)'$/, (_, name) => `Page: ${name}`],
+        [/^Gồm ~(\d+) sections và ~(\d+) màn hình$/, (_, sections, screens) => `About ${sections} sections and ${screens} screens`],
+        [/^Mục đang chọn: (.*)$/, (_, name) => `Selected: ${name}`],
+        [/^Quét toàn bộ (\d+) pages trong dự án$/, (_, count) => `Scan all ${count} pages in this file`],
+        [/^📝 Đã lưu notes: (.*)$/, (_, name) => `📝 Notes saved: ${name}`],
+        [/^❌ Lỗi lưu notes: (.*)$/, (_, error) => `❌ Could not save notes: ${error}`],
+        [/^💾 Đang lưu: (.*?) \((\d+) files:.*$/, (_, name, count) => `💾 Saving: ${name} (${count} files)…`],
+        [/^✅ Đã lưu xong (.*)$/, (_, name) => `✅ Saved: ${name}`],
+        [/^❌ Server lỗi khi lưu: (.*)$/, (_, name) => `❌ Server could not save: ${name}`],
+        [/^❌ Lỗi gửi file: (.*)$/, (_, error) => `❌ Upload failed: ${error}`],
+        [/^🚀 Bắt đầu xuất theo chế độ: \[(.*)\].*$/, (_, scope) => `🚀 Starting export: ${scope}. Keep the Figma window open.`],
+        [/^⏭ Không đổi: (.*)$/, (_, name) => `⏭ Unchanged: ${name}`],
+        [/^📸 Render ảnh 2x Retina & trích xuất SVGs, Images, CSS 100%: (.*)$/, (_, name) => `📸 Rendering screenshot and extracting assets/CSS: ${name}`],
+        [/^🚀 Đang quét toàn bộ Page '(.*)'\.\.\.$/, (_, name) => `🚀 Scanning page: ${name}…`],
+        [/^📁 Đang xử lý Page: (.*)$/, (_, name) => `📁 Processing page: ${name}`],
+        [/^📥 Đang tải tất cả các pages trong document\.\.\.$/, () => '📥 Loading all pages…']
+      ];
+      for (const [pattern, replacement] of patterns) if (pattern.test(value)) return value.replace(pattern, replacement);
+      return value;
+    }
+    function appendLog(entry) {
+      const follow = logs.scrollHeight - logs.scrollTop - logs.clientHeight < 32;
+      const div = document.createElement("div");
+      div.className = `log-entry log-${entry.type}`;
+      div.textContent = translate(entry.value);
+      logs.appendChild(div);
+      if (logs.children.length > 1000) logs.firstChild.remove();
+      if (follow) logs.scrollTop = logs.scrollHeight;
+    }
+    function renderLogs() {
+      const position = logs.scrollTop;
+      logs.replaceChildren();
+      for (const entry of logEntries) appendLog(entry);
+      logs.scrollTop = position;
+    }
+    const stats = { checked:0, saved:0, skipped:0 };
+    let phase = "ready";
+    const words = (vi,en) => language === "vi" ? vi : en;
+    function renderOptionHint() {
+      document.getElementById("force-hint").hidden = delivery !== "local";
+      document.getElementById("force-hint").textContent = document.getElementById("force-export").checked
+        ? words("Xuất lại mọi màn hình trong phạm vi đã chọn, kể cả không thay đổi.", "Re-exports every screen in the selected scope, including unchanged screens.")
+        : words("Tự động bỏ qua màn hình đã export nếu không thay đổi.", "Previously exported screens are automatically skipped if unchanged.");
+    }
+    function renderProgress() {
+      const labels = {ready:words("Sẵn sàng","Ready"),checking:words("Đang kiểm tra…","Checking…"),exporting:words("Đang export…","Exporting…"),done:words("Hoàn tất","Completed"),error:words("Export dừng do lỗi","Export stopped with an error")};
+      document.getElementById("progress").hidden = phase === "ready";
+      document.getElementById("progress").textContent = `${labels[phase]} · ${stats.checked} ${words("đã kiểm tra","checked")} · ${stats.saved} ${words("đã lưu","saved")} · ${stats.skipped} ${words("bỏ qua","skipped")}`;
+      btnExport.textContent = isExporting ? labels[phase] : words("Export thiết kế","Export designs");
+      btnExport.setAttribute("aria-busy", String(isExporting));
+    }
+    function setLanguage(value) {
+      language = value === "en" ? "en" : "vi";
+      document.documentElement.lang = language;
+      document.getElementById("language-switch").checked = language === "en";
+      document.querySelectorAll("[data-i18n]").forEach(el => { el.innerHTML = translations[el.dataset.i18n][language]; });
+      document.querySelectorAll("[data-icon-label]").forEach(el => {
+        const label = translations[el.dataset.iconLabel][language];
+        el.removeAttribute("title");
+        el.setAttribute("aria-label", label);
+        el.dataset.tooltip = label;
+      });
+      document.getElementById("force-export").setAttribute("aria-label", words("Xuất lại mọi màn hình, kể cả không thay đổi", "Re-export every screen, including unchanged screens"));
+      document.querySelector(".force-toggle").title = words("Bật để bỏ qua cache. Mặc định chỉ xuất màn hình mới hoặc thay đổi.", "Enable to ignore cache. By default, only new or changed screens are exported.");
+      renderOptionHint();
+      if (currentStatus) renderStatus();
+      renderLogs();
+      renderProgress();
+      renderDelivery();
+      document.getElementById('sync-control').title = words('Giữ plugin và bridge đang mở. figma-handoff sync xuất toàn bộ trang ở 2×, bỏ qua màn hình không đổi.','Keep the plugin and bridge open. figma-handoff sync exports all pages at 2× and skips unchanged screens.');
+      checkServer();
+    }
+    let syncToken = null, documentId = null, syncJob = null;
+    async function syncRequest(route, extra={}) {
+      const response = await fetch(BRIDGE_URL+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project_id:projectId,documentId,token:syncToken,...extra}),signal:AbortSignal.timeout(4000)});
+      const data = await response.json(); if(!response.ok) throw new Error(data.error || 'Sync failed'); return data;
+    }
+    async function disableSync() {
+      if(syncToken) {
+        try { await syncRequest('/sync/unpair'); } catch(error) { toast(error.message); }
+      }
+      syncToken=null;
+      document.getElementById('allow-sync').checked=false;
+    }
+    async function finishSync(error) {
+      if(!syncJob) return;
+      const jobId=syncJob;syncJob=null;
+      try { await syncRequest('/sync/result',{jobId,error,stats:{...stats}}); } catch(e) {addLog(e.message,'error');}
+    }
+    let delivery = "zip";
+    let exportDelivery = "zip";
+    const zipFiles = new Map();
+    let zipURL;
+    // ZIP STORE: UTF-8 names, CRC32, no compression or external CDN/runtime dependency.
+    function makeZip(entries) {
+      const encoder = new TextEncoder();
+      const locals = [], central = []; let offset = 0;
+      const crc32 = data => { let crc = -1; for (const byte of data) { crc ^= byte; for(let i=0;i<8;i++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0); } return (crc ^ -1) >>> 0; };
+      const header = length => new Uint8Array(length);
+      for (const [path,data] of entries) {
+        const name = encoder.encode(path); const crc = crc32(data);
+        const local = header(30); const l = new DataView(local.buffer);
+        l.setUint32(0,0x04034b50,true); l.setUint16(4,20,true); l.setUint16(6,0x800,true); l.setUint16(12,33,true); l.setUint32(14,crc,true); l.setUint32(18,data.length,true); l.setUint32(22,data.length,true); l.setUint16(26,name.length,true);
+        const record = header(46); const c = new DataView(record.buffer);
+        c.setUint32(0,0x02014b50,true); c.setUint16(4,20,true); c.setUint16(6,20,true); c.setUint16(8,0x800,true); c.setUint16(14,33,true); c.setUint32(16,crc,true); c.setUint32(20,data.length,true); c.setUint32(24,data.length,true); c.setUint16(28,name.length,true); c.setUint32(42,offset,true);
+        locals.push(local,name,data); central.push(record,name); offset += local.length + name.length + data.length;
+      }
+      const centralSize = central.reduce((sum,b)=>sum+b.length,0); const end = header(22);const e = new DataView(end.buffer);
+      if(entries.size > 65535 || offset + centralSize > 0xffffffff) throw new Error("ZIP too large; export a smaller selection.");
+      e.setUint32(0,0x06054b50,true); e.setUint16(8,entries.size,true); e.setUint16(10,entries.size,true); e.setUint32(12,centralSize,true); e.setUint32(16,offset,true);
+      return new Blob([...locals,...central,end],{type:"application/zip"});
+    }
+    const zipName = value => String(value || "unnamed").replace(/[\\/*?:"<>|]/g,"_").replace(/^\.+$/, "_").trim() || "unnamed";
+    function addZipFiles(msg, files) {
+      const nodes = msg.node_path.map(n => `${zipName(n.name)}--${zipName(n.id)}`);
+      const folder = [zipName(msg.document.name) + "--" + zipName(msg.document.id), ...nodes].join("/");
+      for(const file of files) {
+        const bytes = file.type === "base64" ? Uint8Array.from(atob(file.content), c=>c.charCodeAt(0)) : new TextEncoder().encode(file.content);
+        zipFiles.set(folder + "/" + file.name.split("/").map(zipName).join("/"), bytes);
+      }
+    }
+    function renderDelivery() {
+      document.getElementById("sync-control").hidden = delivery !== "local";
+      if(delivery !== "local" && syncToken) void disableSync();
+      document.getElementById("local-destination").hidden = delivery !== "local";
+      document.querySelector(".help").hidden = delivery !== "local";
+      document.getElementById("force-control").hidden = delivery !== "local";
+      document.getElementById("delivery-note").textContent = delivery === "zip"
+        ? words("Không cần CLI. Tải ZIP rồi giải nén vào project. Mỗi lần xuất tạo ZIP mới.","No CLI needed. Download and extract into your project. Each export creates a new ZIP.")
+        : words("Cài CLI và chạy bridge trên máy này để lưu trực tiếp, tự bỏ qua màn hình không đổi.","Install the CLI and run the bridge on this computer to save directly and skip unchanged screens.");
+      renderOptionHint(); updateButtonState();
+    }
+    const BRIDGE_URL = "http://localhost:3055";
+    let isServerOnline = false;
+    let projectId = null;
+    let exportProjectId = null;
+    let currentStatus = null;
+    let isExporting = false;
+    let activeRunId = null;
+
+    const serverBadge = document.getElementById("server-badge");
+    const pageScopeTitle = document.getElementById("page-scope-title");
+    const pageScopeDesc = document.getElementById("page-scope-desc");
+    const selScopeTitle = document.getElementById("sel-scope-title");
+    const selScopeDesc = document.getElementById("sel-scope-desc");
+    const allPagesDesc = document.getElementById("all-pages-desc");
+    const btnExport = document.getElementById("btn-export");
+    const logs = document.getElementById("logs");
+
+
+    function getSelectedScope() {
+      const radios = document.getElementsByName("export-scope");
+      for (const r of radios) {
+        if (r.checked) return r.value;
+      }
+      return "current_page";
+    }
+
+    function addLog(text, type = "info") {
+      const entry = { value: text, type };
+      logEntries.push(entry);
+      if (logEntries.length > 1000) logEntries.shift();
+      appendLog(entry);
+    }
+
+    async function checkServer() {
+      try {
+        const res = await fetch(`${BRIDGE_URL}/health`, { method: "GET", signal: AbortSignal.timeout(4000) });
+        if (res.ok) {
+          const health = await res.json();
+          if (health.protocol_version !== 1) throw new Error("VERSION_MISMATCH");
+          projectId = health.project_id;
+          document.getElementById("project-name").textContent = translate(`Project: ${health.project_name || health.project_id}`);
+          document.getElementById("output-directory").textContent = health.exports_dir;
+          document.getElementById("connection-error").textContent = "";
+          document.getElementById("connection-actions").hidden = true;
+          document.getElementById("retry-action").hidden = true;
+          document.getElementById("project-name").hidden = false;
+          document.querySelector(".destination-path").hidden = false;
+          isServerOnline = true;
+          serverBadge.className = "badge badge-online";
+          serverBadge.innerText = words("Đã kết nối", "Connected");
+        } else {
+          throw new Error(`HTTP ${res.status}`);
+        }
+      } catch (err) {
+        document.getElementById("connection-error").textContent = err.message === "VERSION_MISMATCH"
+          ? words("Bridge khác phiên bản. Dừng bridge và chạy lại figma-handoff serve.","Bridge version mismatch. Stop it and rerun figma-handoff serve.")
+          : words("Chạy lệnh bên dưới trên máy này để kết nối. Nếu bridge đã chạy, kiểm tra quyền truy cập mạng local.","Start the bridge on this computer using the command below. If it is running, check local-network permissions.") + (err.message.startsWith("HTTP") ? ` (${err.message})` : "");
+        document.getElementById("connection-actions").hidden = false;
+        document.getElementById("retry-action").hidden = false;
+        document.getElementById("project-name").hidden = true;
+        document.querySelector(".destination-path").hidden = true;
+        isServerOnline = false;
+        document.getElementById("project-name").textContent = translate("Chưa kết nối — chạy figma-handoff serve trên máy này");
+        document.getElementById("output-directory").textContent = translate("Chưa xác định");
+        serverBadge.className = "badge badge-offline";
+        serverBadge.innerText = words("Chưa kết nối", "Disconnected");
+      }
+      updateButtonState();
+    }
+
+    function renderStatus() {
+        pageScopeTitle.innerText = words(`Trang hiện tại: ${currentStatus.currentPageName}`, `Current page: ${currentStatus.currentPageName}`);
+        pageScopeDesc.innerText = translate(`Gồm ~${currentStatus.pageSections} sections và ~${currentStatus.pageScreens} màn hình`);
+
+        if (currentStatus.hasSelection) {
+          selScopeTitle.innerText = words(`Chỉ mục đã chọn: ${currentStatus.selectionName}`, `Selected items only: ${currentStatus.selectionName}`);
+          selScopeDesc.innerText = translate(`Gồm ~${currentStatus.selectionSections} sections và ~${currentStatus.selectionScreens} màn hình`);
+        } else {
+          selScopeTitle.innerText = translate("Chỉ mục đang chọn trên Canvas");
+          selScopeDesc.innerText = translate("Chưa chọn mục nào trên canvas");
+        }
+
+        allPagesDesc.innerText = words(`Kiểm tra ${currentStatus.totalPages} trang; bỏ qua Trash. Phạm vi lớn nhất.`, `Check ${currentStatus.totalPages} pages; skip Trash. Largest scope.`);
+    }
+
+    function updateButtonState() {
+      const scope = getSelectedScope();
+      if (isExporting) { btnExport.disabled = true; return; }
+      if (delivery === "local" && !isServerOnline) {
+        btnExport.disabled = true;
+        return;
+      }
+      if (scope === "selection" && (!currentStatus || !currentStatus.hasSelection)) {
+        btnExport.disabled = true;
+        return;
+      }
+      btnExport.disabled = false;
+    }
+
+    document.querySelectorAll("input[name='export-scope']").forEach(r => {
+      r.addEventListener("change", updateButtonState);
+    });
+
+    function setControlsDisabled(disabled) {
+      document.querySelectorAll("input[name=delivery], input[name='export-scope'], input[name=scale], #force-export").forEach(el => { el.disabled = disabled; });
+    }
+    let toastTimer;
+    function toast(message) {
+      const el = document.getElementById("action-feedback");
+      clearTimeout(toastTimer);
+      el.textContent = message;
+      el.hidden = false;
+      toastTimer = setTimeout(() => { el.hidden = true; }, 3000);
+    }
+    function legacyCopy(value) {
+      const previous = document.activeElement;
+      const field = document.createElement("textarea");
+      field.value = value;
+      field.style.cssText = "position:fixed;left:0;top:0;opacity:0;width:1px;height:1px";
+      document.body.appendChild(field);
+      field.focus(); field.select();
+      let copied = false;
+      try { copied = document.execCommand("copy"); } catch {}
+      field.remove(); previous?.focus();
+      return copied;
+    }
+    async function copyText(value) {
+      if (!value) { toast(words("Chưa có log để copy.","No log entries to copy.")); return; }
+      // Synchronous fallback preserves the click gesture in Figma's sandboxed iframe.
+      let copied = legacyCopy(value);
+      if (!copied && navigator.clipboard?.writeText) {
+        try { await navigator.clipboard.writeText(value); copied = true; } catch {}
+      }
+      if (copied) { toast(words("Đã copy vào clipboard.","Copied to clipboard.")); return; }
+      const dialog = document.getElementById("copy-dialog");
+      const field = document.getElementById("manual-copy");
+      field.value = value;
+      dialog.showModal(); field.focus(); field.select();
+    }
+    document.getElementById("close-copy").onclick = () => document.getElementById("copy-dialog").close();
+    document.getElementById("options-help").addEventListener("toggle", event => {
+      document.getElementById("options-help-button").setAttribute("aria-expanded", String(event.newState === "open"));
+      if (event.newState === "closed" && document.activeElement === document.body) document.getElementById("options-help-button").focus();
+    });
+    document.getElementById("force-export").addEventListener("change", renderOptionHint);
+    document.querySelectorAll("input[name=delivery]").forEach(el => el.addEventListener("change", () => { delivery = el.value; renderDelivery(); }));
+    document.getElementById("copy-install").onclick = () => copyText("npm install -g @viettran210/figma-handoff-kit");
+    document.getElementById("retry").onclick = checkServer;
+    document.getElementById("copy-command").onclick = () => copyText("figma-handoff serve");
+    document.getElementById("copy-help-command").onclick = () => copyText("figma-handoff serve");
+    document.getElementById("copy-log").onclick = () => copyText(logEntries.map(e => translate(e.value)).join("\n"));
+    document.getElementById("clear-log").onclick = () => { logEntries.length = 0; logs.replaceChildren(); };
+    document.getElementById("language-switch").addEventListener("change", event => {
+      setLanguage(event.target.checked ? "en" : "vi");
+      parent.postMessage({ pluginMessage: { type: "SET_LANGUAGE", language } }, "*");
+    });
+    logEntries.push({ value: "[Ready] Chờ lệnh xuất dữ liệu Pixel-Perfect...", type: "info" });
+    setLanguage("vi");
+    setInterval(checkServer, 5000);
+
+    // Reliable upload helper with retry
+    async function uploadPayloadWithRetry(endpoint, bodyObj, retries = 2) {
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          const res = await fetch(`${BRIDGE_URL}${endpoint}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(60000),
+            body: JSON.stringify({ ...bodyObj, project_id: exportProjectId })
+          });
+          if (res.ok) return true;
+          const failure = await res.json().catch(() => ({}));
+          throw new Error(failure.error || `HTTP ${res.status}`);
+        } catch (e) {
+          if (attempt === retries) throw e;
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+      return false;
+    }
+
+    window.onmessage = async (event) => {
+      const msg = event.data.pluginMessage;
+      if (!msg) return;
+      if (!["LANGUAGE", "STATUS_UPDATE", "DOCUMENT_ID"].includes(msg.type) && (!isExporting || msg.runId !== activeRunId)) return;
+
+      if (msg.type === "DOCUMENT_ID") { documentId=msg.documentId; return; }
+      if (msg.type === "LANGUAGE") { setLanguage(msg.language); }
+      else if (msg.type === "CHECK_SCREEN") {
+        if (exportDelivery === "zip") {
+          stats.checked++; renderProgress();
+          parent.postMessage({pluginMessage:{type:"CHECK_RESULT",hash:"",unchanged:false}},"*");
+          return;
+        }
+        phase = "checking"; renderProgress();
+        try {
+          const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])])) : value;
+          const snapshot = JSON.stringify(canonical(JSON.parse(msg.snapshot)));
+          const response = await fetch(`${BRIDGE_URL}/check`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ project_id: exportProjectId, document: msg.document, node_path: msg.node_path, snapshot })
+          });
+          if (!response.ok) throw new Error("Bridge change check failed; reload updated bridge.");
+          const result = await response.json();
+          if (!result.hash) throw new Error(words("Cần cập nhật bridge để tính hash. Khởi động lại CLI bản mới.", "Update the bridge to support hashing, then restart the CLI."));
+          stats.checked++;
+          if (result.unchanged && !document.getElementById("force-export").checked) stats.skipped++;
+          renderProgress();
+          parent.postMessage({ pluginMessage: { type: "CHECK_RESULT", hash: result.hash, unchanged: result.unchanged } }, "*");
+        } catch (error) {
+          parent.postMessage({ pluginMessage: { type: "CHECK_RESULT", error: error.message } }, "*");
+        }
+      }
+      else if (msg.type === "STATUS_UPDATE") {
+        currentStatus = msg.data;
+        renderStatus();
+        updateButtonState();
+      }
+
+      else if (msg.type === "PROGRESS_UPDATE") {
+        addLog(msg.message, "info");
+      }
+
+      else if (msg.type === "UPLOAD_NOTES") {
+        if(exportDelivery === "zip") {
+          try { addZipFiles(msg,[{name:"flow_notes.md",content:msg.content}]); parent.postMessage({pluginMessage:{type:"SCREEN_UPLOAD_ACK",success:true}},"*"); }
+          catch(error) { addLog(error.message,"error"); parent.postMessage({pluginMessage:{type:"SCREEN_UPLOAD_ACK",success:false}},"*"); }
+          return;
+        }
+        let success = false;
+        try {
+          success = await uploadPayloadWithRetry("/save-notes", {
+            folder_path: msg.folder_path,
+            document: msg.document,
+            node_path: msg.node_path,
+            filename: "flow_notes.md",
+            content: msg.content
+          });
+          if (success) addLog(`📝 Đã lưu notes: ${msg.folder_path.join(" / ")}`, "success");
+        } catch (e) {
+          addLog(`❌ Lỗi lưu notes: ${e.message}`, "error");
+        } finally {
+          parent.postMessage({ pluginMessage: { type: "SCREEN_UPLOAD_ACK", success: success } }, "*");
+        }
+      }
+
+      else if (msg.type === "UPLOAD_SCREEN_BATCH") {
+        if(exportDelivery === "zip") {
+          try { addZipFiles(msg,msg.files); stats.saved++; renderProgress(); addLog(`✅ Đã lưu xong ${msg.screen_name}`,"success"); parent.postMessage({pluginMessage:{type:"SCREEN_UPLOAD_ACK",success:true}},"*"); }
+          catch(error) { addLog(error.message,"error"); parent.postMessage({pluginMessage:{type:"SCREEN_UPLOAD_ACK",success:false}},"*"); }
+          return;
+        }
+        phase = "exporting"; renderProgress();
+        addLog(`💾 Đang lưu: ${msg.screen_name} (${msg.files.length} files: 100% CSS, DOM tree, Tokens, SVGs/PNGs)...`, "info");
+        let success = false;
+        try {
+          const payload = {
+            folder_path: msg.folder_path,
+            document: msg.document,
+            node_path: msg.node_path,
+            content_hash: msg.content_hash,
+            files: msg.files
+          };
+
+          success = await uploadPayloadWithRetry("/save", payload, 2);
+          if (success) {
+            stats.saved++; renderProgress();
+            addLog(`✅ Đã lưu xong ${msg.screen_name}`, "success");
+          } else {
+            addLog(`❌ Server lỗi khi lưu: ${msg.screen_name}`, "error");
+          }
+        } catch (e) {
+          addLog(`❌ Lỗi gửi file: ${e.message}`, "error");
+        } finally {
+          // Always send ACK back to code.js so it can proceed sequentially to the next screen!
+          parent.postMessage({ pluginMessage: { type: "SCREEN_UPLOAD_ACK", success: success } }, "*");
+        }
+      }
+
+      else if (msg.type === "EXPORT_ERROR") {
+        finishSync(msg.message);
+        addLog(msg.message, "error");
+        isExporting = false;
+        phase = msg.type === "EXPORT_ERROR" ? "error" : "done";
+        renderProgress();
+        setControlsDisabled(false);
+        updateButtonState();
+      }
+
+      else if (msg.type === "EXPORT_FINISHED") {
+        finishSync();
+        if(exportDelivery === "zip") {
+          try {
+            if (!zipFiles.size) throw new Error(words("Không có màn hình để xuất.","No screens to export."));
+            if(zipURL) URL.revokeObjectURL(zipURL);
+            zipURL = URL.createObjectURL(makeZip(zipFiles));
+            const link = document.getElementById("zip-download"); link.href = zipURL; link.hidden = false; link.click();
+          } catch(error) { addLog(error.message,"error"); isExporting=false; phase="error"; setControlsDisabled(false);renderProgress();updateButtonState();return; }
+          finally { zipFiles.clear(); }
+        }
+        addLog(exportDelivery === "zip" ? words("ZIP sẵn sàng. Bấm Tải file ZIP nếu chưa tải tự động.","ZIP ready. Click Download ZIP file if the download did not start.") : "🎉 Hoàn tất export tới thư mục đã cấu hình.", "success");
+        isExporting = false;
+        phase = msg.type === "EXPORT_ERROR" ? "error" : "done";
+        renderProgress();
+        setControlsDisabled(false);
+        updateButtonState();
+      }
+    };
+
+    function startExport(fromSync=false) {
+      if (isExporting || (!fromSync && btnExport.disabled)) return;
+      // Figma iframe environments may not expose the secure-context randomUUID API.
+      activeRunId = `export-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      exportDelivery = delivery;
+      zipFiles.clear();
+      if (zipURL) { URL.revokeObjectURL(zipURL); zipURL = null; }
+      document.getElementById("zip-download").hidden = true;
+      isExporting = true;
+      stats.checked = stats.saved = stats.skipped = 0;
+      phase = "checking";
+      renderProgress();
+      setControlsDisabled(true);
+      btnExport.disabled = true;
+      const scope = fromSync ? "all_pages" : getSelectedScope();
+      const scale = fromSync ? 2 : Number(document.querySelector("input[name=scale]:checked").value);
+      addLog(`🚀 Bắt đầu xuất theo chế độ: [${scope}]... Vui lòng không đóng cửa sổ Figma.`, "info");
+      exportProjectId = projectId;
+      parent.postMessage({ pluginMessage: { type: "START_EXPORT", runId: activeRunId, scope: scope, scale: scale, force: fromSync ? false : document.getElementById("force-export").checked } }, "*");
+    };
+    btnExport.onclick = event => { if(event.isTrusted) startExport(); };
+    parent.postMessage({pluginMessage:{type:'GET_DOCUMENT'}},'*');
+    document.getElementById('allow-sync').onchange = async event => {
+      if(!event.target.checked) { await disableSync(); return; }
+      try {
+        if(!documentId || !isServerOnline || delivery!=='local') throw new Error(words('Chọn lưu vào project và kết nối trước.','Connect to a project first.'));
+        const paired=await syncRequest('/sync/pair');syncToken=paired.token;
+      } catch(error) {event.target.checked=false;toast(error.message);}
+    };
+    let syncPolling=false;
+    setInterval(async()=>{
+      if(!syncToken || syncPolling || delivery!=='local') return;
+      syncPolling=true;
+      try { const result=await syncRequest('/sync/poll'); if(result.job) { if(isExporting) await syncRequest('/sync/result',{jobId:result.job.id,error:'Plugin is already exporting; retry after it finishes.'}); else {syncJob=result.job.id;startExport(true);} } }
+      catch(error) {syncToken=null;document.getElementById('allow-sync').checked=false;toast(error.message);}
+      finally {syncPolling=false;}
+    },2000);
+  </script>
+</body>
+</html>

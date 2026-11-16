@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.*
+!.env.example
+*.log
+*.tgz
+.DS_Store
+__pycache__/
+exports/
+screenshots/
+specs/
+
+# Generated distribution archive
+figma-exporter-plugin.zip
