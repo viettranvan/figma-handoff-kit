@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.4
+
+- Preserve full stroke metadata and native CSS; only generate safe inside-solid box border fallbacks.
+- Export official Figma component properties/definitions and separate layer-name guesses from the code API.
+- Follow variable aliases across modes with cycle/missing-reference diagnostics, and retain source metadata within SVG assets.
+
+- Refresh the bridge destination before local export and require a second click if the project changed.
+- Preserve the actual HTTP/bridge error during change checks instead of incorrectly asking users to upgrade.
+
+- Preserve original image formats, source sizes and per-fill crop/transform metadata.
+- Keep typography units and distinct full-record variants, and export text runs for fill/decoration differences.
+- Build font guides from actual families and normal/italic variants; label provider URLs unverified instead of claiming automatic font availability.
+
+- Correct Semi Bold weights across CSS/font tracking, prevent text fill from creating a background, and map Fill sizing to the parent layout axis.
+- Preserve native gradient CSS and original gradient paint data; warn when native gradient CSS is unavailable instead of guessing geometry.
+
+- Preserve named Figma paint/text styles and variable bindings in a token catalog with per-node and per-text-range references.
+- Retain per-consumer variable values and source values by mode; record unavailable metadata without stopping export.
+- Refresh export checkpoints for the new token metadata.
+
 ## 0.2.3
 
 - Move the npm package from `@viettran210/figma-handoff-kit` to `figma-handoff-kit`.

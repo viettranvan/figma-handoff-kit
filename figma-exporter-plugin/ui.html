@@ -796,7 +796,11 @@
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ project_id: exportProjectId, document: msg.document, node_path: msg.node_path, snapshot })
           });
-          if (!response.ok) throw new Error("Bridge change check failed; reload updated bridge.");
+          if (!response.ok) {
+            const failure = await response.json().catch(() => ({}));
+            const detail = failure.error || `HTTP ${response.status}`;
+            throw new Error(words("Không kiểm tra được thay đổi", "Change check failed") + ` (HTTP ${response.status}): ${detail}`);
+          }
           const result = await response.json();
           if (!result.hash) throw new Error(words("Cần cập nhật bridge để tính hash. Khởi động lại CLI bản mới.", "Update the bridge to support hashing, then restart the CLI."));
           stats.checked++;
@@ -903,8 +907,22 @@
       }
     };
 
-    function startExport(fromSync=false) {
+    async function startExport(fromSync=false) {
       if (isExporting || (!fromSync && btnExport.disabled)) return;
+      if (delivery === 'local') {
+        const displayedProjectId = projectId;
+        btnExport.disabled = true;
+        await checkServer();
+        if (isExporting) return;
+        if (!isServerOnline) {
+          addLog(words('Không kết nối được bridge. Kiểm tra nơi lưu rồi thử lại.', 'Cannot connect to the bridge. Check the destination and retry.'), 'error');
+          return;
+        }
+        if (projectId !== displayedProjectId) {
+          addLog(words('Project lưu đã thay đổi. Kiểm tra tên project và thư mục đang hiển thị, rồi bấm Export lại.', 'Destination project changed. Review the displayed project and output folder, then click Export again.'), 'error');
+          return;
+        }
+      }
       // Figma iframe environments may not expose the secure-context randomUUID API.
       activeRunId = `export-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       exportDelivery = delivery;

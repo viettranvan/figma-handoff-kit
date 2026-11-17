@@ -1,0 +1,23 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
+const s=readFileSync(new URL('../figma-exporter-plugin/code.js',import.meta.url),'utf8');
+test('SVG descendants keep tokens and fonts without rendering duplicate child assets',async()=>{
+ let exports=0;
+ const color={type:'SOLID',color:{r:1,g:0,b:0},boundVariables:{color:{type:'VARIABLE_ALIAS',id:'red'}}};
+ const run={start:0,end:1,characters:'A',fontName:{family:'Inter',style:'Regular'},fontWeight:400,fontSize:12,lineHeight:{unit:'PIXELS',value:18},letterSpacing:{unit:'PIXELS',value:0},fills:[color]};
+ const child={id:'text',name:'Label',type:'TEXT',width:10,height:18,x:0,y:0,characters:'A',...run,getStyledTextSegments:()=>[run],exportAsync:()=>{throw new Error('Must not render child');}};
+ const vector={id:'vector',name:'Vector',type:'VECTOR',width:8,height:8,x:0,y:0,fills:[color],exportAsync:()=>{throw new Error('Must not render child');}};
+ const root={id:'icon',name:'Icon',type:'FRAME',width:40,height:40,x:0,y:0,children:[child,vector],exportAsync:async()=>{exports++;return new TextEncoder().encode('<svg/>');}};
+ const figma={mixed:Symbol(),variables:{getVariableByIdAsync:async()=>({id:'red',name:'Brand/red',valuesByMode:{default:{r:1,g:0,b:0}},resolveForConsumer:()=>({value:{r:1,g:0,b:0}})})}};
+ const extract=vm.runInNewContext(s.slice(s.indexOf('function sanitizeFilename('),s.indexOf('// Generate Screen Spec Markdown'))+';extractDetailedNodeTree',{figma,TextDecoder,sendUI(){}});
+ const context={designTokens:{colors:{},typography:{},radii:{},shadows:{}},fontsUsed:{},componentsUsed:{},assets:[],assetsManifest:[]};
+ const result=await extract(root,context);
+ assert.equal(exports,1);assert.equal(context.assets.length,1);
+ assert.equal(result.children,undefined);assert.equal(result.sourceChildren.length,2);
+ assert.equal(result.sourceChildren[0].tokenReferences[0].tokenId,'variable:red');
+ assert.equal(context.designTokens.namedTokens['variable:red'].name,'Brand/red');
+ assert.equal(context.fontsUsed.Inter['400'].normal,true);
+ assert.doesNotThrow(()=>JSON.stringify({result,tokens:context.designTokens}));
+});

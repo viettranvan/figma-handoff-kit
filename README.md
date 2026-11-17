@@ -203,3 +203,105 @@ figma-handoff plugin --open
 Import the new manifest path in Figma Desktop, then reopen the plugin and run
 `figma-handoff start`. Existing project registration and exported files are
 preserved. The old package does not automatically upgrade to the new name.
+
+### Named Figma colors and typography
+
+`design_tokens.json` keeps resolved CSS color/typography inventories and adds
+`namedTokens`, keyed by `style:<id>` or `variable:<id>`. Entries retain original
+names, keys and source IDs. Paint styles include paints; Text Styles include
+font metrics. Variables include collection ID and original values by mode,
+including alias IDs. Aliases are expanded across source modes with cycle and
+missing-variable diagnostics. This catalogs encountered bindings and their
+dependencies, rather than every unused token in the design system.
+
+`spec.json` adds `tokenReferences` to nodes: property, token ID, optional text
+range (`start` inclusive / `end` exclusive), and variable `resolvedValue` for that
+consumer. CSS and typography remain the resolved visual values, including local
+overrides. Use references to identify source styles; do not infer identity from
+matching hex values. Several names may intentionally share a color or font size.
+Mixed text styles/fills are inspected per range even with identical font metrics.
+Unavailable styles/variables retain references and `tokenWarnings` without
+stopping export. Raw unbound values do not receive invented names.
+
+The extractor checkpoint version changes to refresh existing exports once.
+After future library token changes, use Re-export all if a screen is skipped.
+
+### CSS extraction fidelity
+
+Font weights prefer Figma numeric values, then native CSS, then a shared style-name
+fallback (including Semi Bold = 600). Text fills set glyph color without adding a
+background. Fill sizing uses the parent auto-layout axis: remaining-space growth
+on the main axis and stretch on the cross axis; absolute children do not flex.
+
+Gradient CSS is retained from Figma rather than regenerated with a fixed angle.
+`spec.json` also retains visible gradient paints as `gradientFills`, including
+transforms and stops. If native gradient CSS is unavailable, `cssWarnings` explains
+that the gradient needs the original metadata/screenshot or an exported asset.
+The exporter does not claim a guessed gradient is accurate.
+
+### Image sources and rich text
+
+Original image files retain their detected format (PNG/JPEG/GIF/WebP, otherwise
+`.bin`). `spec.json.imageFills` records each visible image paint, original hash,
+scale mode, crop transform, rotation, opacity/filters when supplied by Figma,
+source image size and node size. Assets are original bytes: apply those paint
+settings to reproduce the crop; source dimensions are not the node dimensions.
+`assetImage` remains a compatibility pointer to the first available source;
+use `imageFills` for nodes with multiple image paints. Missing source data gets
+a per-fill warning. This does not bake the crop into a new image.
+
+Typography lineHeight/letterSpacing now retain `{unit, value}` (or `{unit: AUTO}`
+for automatic line height), rather than ambiguous numbers. Typography inventory
+keys encode the full record; readers should use record fields rather than parse
+keys. Text nodes always include `textRuns`, retaining fills, decoration, case,
+style IDs and font metrics for each range, including direct unbound colors.
+
+Font guides use encountered family names and normal/italic variants. They do not
+assume private fonts exist on Google Fonts. `googleFontUrl` is null; the optional
+`googleFontsCandidateUrl` must be verified before use. Supply licensed font files
+or a verified stylesheet. The suggested stack ends with sans-serif and includes
+no invented default family. Consumers of the previous typography/font-guide
+schema need to handle these richer fields.
+
+### Exporting one Figma file to two projects
+
+Register A and B separately and keep their output directories separate. The same
+Figma document can be exported to both; each destination owns its manifest and
+checkpoints. Stop the bridge for A, then start B and review the destination shown
+in the plugin. If the project changed since the last health check, export asks
+you to review the new destination and click again.
+
+Do not copy an export manifest from A into a newly registered B: it belongs to
+A's project ID. A change-check error now reports the actual bridge rejection.
+`Project changed` means the plugin/request targets a different project;
+`Output belongs to another project` means the output manifest belongs to another
+registration. Use a fresh output folder for an independent B export; preserve the
+old folder rather than deleting or editing its manifest to bypass the check.
+
+### Stroke, component properties and SVG metadata
+
+`spec.json.stroke` retains every stroke paint (including visibility), alignment,
+weight/side weights, dash pattern, cap, join and miter limit. Native border CSS
+wins. The CSS fallback only maps one solid inside stroke on box-like nodes;
+complex strokes retain their metadata and a warning instead of becoming black
+or a guessed dashed border. SVG/rendered assets remain the visual reference.
+
+Component instances export official `componentProperties` and
+`componentPropertyDefinitions` with full property names (including # IDs),
+types, values, defaults and preferred swaps where available. Node-level
+`componentPropertyReferences` retain links to those definitions. `inferredTextProps`
+records layer-name guesses separately, retaining multiple text layers. Nested
+instances keep their own properties. Missing getters produce warnings.
+`sampleUsages.props` now means official Figma properties; the previous
+`extractedProps` guesses are replaced by `inferredTextProps`. Recommended usage
+requires mapping the Figma component to the verified code API, rather than
+assuming a Figma property name is a valid React/Vue prop.
+
+Named variables recursively include aliases from all source modes. Collection
+names/modes/default mode IDs are included when available. Cycles and unavailable
+variables are recorded; alias traversal is capped at 64 levels and warns on
+truncation. Consumer values still resolve via Figma for the actual node.
+SVG assets retain `sourceChildren`: source-only metadata with tokens, typography
+and component properties inside the SVG. These children are not additional DOM
+or assets to render. Export remains limited to visible nodes in the selected
+scope and their variable dependencies, not the entire unused library.

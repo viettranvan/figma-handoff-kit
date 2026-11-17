@@ -149,21 +149,42 @@ function colorToRgba(color, opacity = 1) {
   return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
-// Convert gradient paint to CSS gradient string
-function gradientToCss(fill) {
-  if (!fill.gradientStops || fill.gradientStops.length === 0) return null;
-  const stops = fill.gradientStops.map(s => {
-    const col = colorToRgba(s.color, s.color.a !== undefined ? s.color.a : 1);
-    const pos = Math.round(s.position * 100);
-    return `${col} ${pos}%`;
-  }).join(", ");
+// Prefer numeric font weights; style names are a fallback for older/mixed data.
+function fontWeightNumber(font, numericWeight) {
+  if (typeof numericWeight === 'number' && Number.isFinite(numericWeight)) return String(numericWeight);
+  const style = (font && typeof font === 'object' ? font.style || '' : '').toLowerCase().replace(/[ -]/g, '');
+  const weights = [['black', '900'], ['heavy', '900'], ['extrabold', '800'], ['ultrabold', '800'], ['semibold', '600'], ['demibold', '600'], ['bold', '700'], ['medium', '500'], ['extralight', '200'], ['ultralight', '200'], ['light', '300'], ['thin', '100']];
+  return (weights.find(([name]) => style.includes(name)) || [null, '400'])[1];
+}
 
-  if (fill.type === "GRADIENT_LINEAR") {
-    return `linear-gradient(180deg, ${stops})`;
-  } else if (fill.type === "GRADIENT_RADIAL") {
-    return `radial-gradient(circle, ${stops})`;
-  }
-  return null;
+// Detect the original file format rather than labeling every source image PNG.
+function imageFormat(bytes) {
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return { extension: 'png', name: 'PNG' };
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return { extension: 'jpg', name: 'JPEG' };
+  const ascii = (start, end) => String.fromCharCode(...bytes.slice(start, end));
+  if (ascii(0, 3) === 'GIF') return { extension: 'gif', name: 'GIF' };
+  if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return { extension: 'webp', name: 'WebP' };
+  return { extension: 'bin', name: 'Unknown original format' };
+}
+
+function inspectStrokes(node) {
+  if (!Array.isArray(node.strokes) || !node.strokes.length) return null;
+  const paints = node.strokes.filter(paint => paint.visible !== false);
+  const weight = typeof node.strokeWeight === 'number' ? node.strokeWeight : null;
+  const sides = ['Top', 'Right', 'Bottom', 'Left'].map(side =>
+    typeof node[`stroke${side}Weight`] === 'number' ? node[`stroke${side}Weight`] : weight);
+  const simple = paints.length === 1 && paints[0].type === 'SOLID' &&
+    ['RECTANGLE', 'FRAME', 'COMPONENT', 'INSTANCE'].includes(node.type) &&
+    node.strokeAlign === 'INSIDE' && !(node.dashPattern || []).length &&
+    sides.every(value => value !== null && value >= 0);
+  return {
+    paints: node.strokes, alignment: node.strokeAlign, weight,
+    sideWeights: { top: sides[0], right: sides[1], bottom: sides[2], left: sides[3] },
+    dashPattern: node.dashPattern || [], cap: node.strokeCap, join: node.strokeJoin,
+    miterLimit: node.strokeMiterLimit,
+    cssFallbackSupported: simple,
+    ...(paints.length && !simple ? { warning: 'Stroke requires native CSS or an SVG/rendered asset; full stroke metadata is retained without a guessed border.' } : {})
+  };
 }
 
 // Semantic HTML tag detector
@@ -208,21 +229,26 @@ async function computeFullCSS(node, figmaCss = {}, parentNode = null) {
     css["box-sizing"] = "border-box";
   }
 
-  // 2. Sizing Constraints (Auto Layout Child)
-  if ("layoutSizingHorizontal" in node) {
-    if (node.layoutSizingHorizontal === "FILL") {
-      css["width"] = "100%";
-      css["flex-grow"] = "1";
-    } else if (node.layoutSizingHorizontal === "HUG") {
-      css["width"] = "fit-content";
-    }
-  }
-  if ("layoutSizingVertical" in node) {
-    if (node.layoutSizingVertical === "FILL") {
-      css["height"] = "100%";
-      css["align-self"] = "stretch";
-    } else if (node.layoutSizingVertical === "HUG") {
-      css["height"] = "fit-content";
+  // Fill grows only on the parent's main axis; cross-axis Fill stretches.
+  for (const [axis, dimension] of [['Horizontal', 'width'], ['Vertical', 'height']]) {
+    const sizing = node[`layoutSizing${axis}`];
+    if (sizing === 'HUG') css[dimension] = 'fit-content';
+    if (sizing !== 'FILL') continue;
+    const flow = node.layoutPositioning !== 'ABSOLUTE' && parentNode && ['HORIZONTAL', 'VERTICAL'].includes(parentNode.layoutMode);
+    if (flow) {
+      const mainAxis = (parentNode.layoutMode === 'HORIZONTAL') === (axis === 'Horizontal');
+      if (mainAxis) {
+        css['flex-grow'] = '1';
+        css['flex-shrink'] = '1';
+        css['flex-basis'] = '0';
+        css[dimension] = '0px';
+        css[`min-${dimension}`] = figmaCss[`min-${dimension}`] || '0px';
+      } else {
+        css[dimension] = 'auto';
+        css['align-self'] = 'stretch';
+      }
+    } else {
+      css[dimension] = '100%';
     }
   }
 
@@ -281,41 +307,24 @@ async function computeFullCSS(node, figmaCss = {}, parentNode = null) {
   }
 
   // 5. Fills & Backgrounds
-  if ("fills" in node && Array.isArray(node.fills) && node.fills.length > 0) {
+  if (node.type !== "TEXT" && "fills" in node && Array.isArray(node.fills) && node.fills.length > 0) {
     const visibleFills = node.fills.filter(f => f.visible !== false);
     for (const fill of visibleFills) {
       if (fill.type === "SOLID") {
         css["background-color"] = colorToRgba(fill.color, fill.opacity !== undefined ? fill.opacity : 1);
-      } else if (fill.type.startsWith("GRADIENT")) {
-        const grad = gradientToCss(fill);
-        if (grad) css["background"] = grad;
       }
+      // Gradients retain native CSS geometry; raw paint data is exported below.
     }
   }
 
-  // 6. Strokes & Borders
-  if ("strokes" in node && Array.isArray(node.strokes) && node.strokes.length > 0) {
-    const visibleStrokes = node.strokes.filter(s => s.visible !== false);
-    if (visibleStrokes.length > 0) {
-      const stroke = visibleStrokes[0];
-      const strokeColor = stroke.type === "SOLID" ? colorToRgba(stroke.color, stroke.opacity !== undefined ? stroke.opacity : 1) : "#000000";
-      const weight = node.strokeWeight || 1;
-      const style = (node.dashPattern && node.dashPattern.length > 0) ? "dashed" : "solid";
-
-      // Individual borders
-      const st = node.strokeTopWeight !== undefined ? node.strokeTopWeight : weight;
-      const sr = node.strokeRightWeight !== undefined ? node.strokeRightWeight : weight;
-      const sb = node.strokeBottomWeight !== undefined ? node.strokeBottomWeight : weight;
-      const sl = node.strokeLeftWeight !== undefined ? node.strokeLeftWeight : weight;
-
-      if (st === sr && sr === sb && sb === sl) {
-        if (weight > 0) css["border"] = `${weight}px ${style} ${strokeColor}`;
-      } else {
-        if (st > 0) css["border-top"] = `${st}px ${style} ${strokeColor}`;
-        if (sr > 0) css["border-right"] = `${sr}px ${style} ${strokeColor}`;
-        if (sb > 0) css["border-bottom"] = `${sb}px ${style} ${strokeColor}`;
-        if (sl > 0) css["border-left"] = `${sl}px ${style} ${strokeColor}`;
-      }
+  // Keep native stroke geometry. Only a simple inside solid box maps to borders.
+  const stroke = inspectStrokes(node);
+  const hasNativeBorder = Object.keys(figmaCss).some(key => key.startsWith('border') && !key.includes('radius'));
+  if (stroke?.cssFallbackSupported && !hasNativeBorder) {
+    const paint = stroke.paints.find(paint => paint.visible !== false);
+    const color = colorToRgba(paint.color, paint.opacity ?? 1);
+    for (const [side, weight] of Object.entries(stroke.sideWeights)) {
+      css[`border-${side}`] = `${weight}px solid ${color}`;
     }
   }
 
@@ -363,14 +372,9 @@ async function computeFullCSS(node, figmaCss = {}, parentNode = null) {
   if (node.type === "TEXT") {
     if (node.fontName && typeof node.fontName === "object" && node.fontName !== figma.mixed) {
       css["font-family"] = `"${node.fontName.family}", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-      const style = (node.fontName.style || "").toLowerCase();
-      if (style.includes("black")) css["font-weight"] = "900";
-      else if (style.includes("extra bold")) css["font-weight"] = "800";
-      else if (style.includes("bold")) css["font-weight"] = "700";
-      else if (style.includes("semi")) css["font-weight"] = "600";
-      else if (style.includes("medium")) css["font-weight"] = "500";
-      else if (style.includes("light")) css["font-weight"] = "300";
-      else css["font-weight"] = "400";
+      css["font-weight"] = typeof node.fontWeight === 'number'
+        ? fontWeightNumber(node.fontName, node.fontWeight)
+        : figmaCss['font-weight'] || fontWeightNumber(node.fontName);
     }
 
     if (node.fontSize && typeof node.fontSize === "number") {
@@ -488,38 +492,28 @@ function inspectComponentInstance(node) {
   const compSet = (mainComp.parent && mainComp.parent.type === "COMPONENT_SET") ? mainComp.parent : null;
   const componentSetName = compSet ? compSet.name : mainComp.name;
   const variants = readVariantProperties(node, mainComp);
-  const variantProps = variants.value || {};
   const masterName = mainComp.name;
 
-  // Extract props by scanning instance children
-  const extractedProps = {};
+  const propertyWarnings = [];
+  function readProperties(owner, field) {
+    try { return owner?.[field] || {}; }
+    catch (error) { propertyWarnings.push(`${field}: ${error.message}`); return null; }
+  }
+  const componentProperties = readProperties(node, 'componentProperties');
+  const componentPropertyDefinitions = readProperties(compSet || mainComp, 'componentPropertyDefinitions');
+  const inferredTextProps = [];
   function findOverrides(n) {
-    if (n.type === "TEXT" && n.characters) {
-      const lower = (n.name || "").toLowerCase();
-      const propKey = lower.includes("label") ? "label"
-                    : lower.includes("title") ? "title"
-                    : lower.includes("placeholder") ? "placeholder"
-                    : lower.includes("value") ? "value"
-                    : "text";
-      if (!extractedProps[propKey]) {
-        extractedProps[propKey] = n.characters;
-      }
+    if (n.type === 'TEXT' && n.characters) {
+      const lower = (n.name || '').toLowerCase();
+      const suggestedName = ['label', 'title', 'placeholder', 'value'].find(name => lower.includes(name)) || 'text';
+      inferredTextProps.push({ nodeId: n.id, nodeName: n.name, suggestedName, value: n.characters, source: 'layer-name-inference' });
     }
-    if (n.children) {
-      for (const ch of n.children) findOverrides(ch);
-    }
+    // Nested instances own their properties; do not treat their text as parent props.
+    if (n !== node && n.type === 'INSTANCE') return;
+    for (const child of n.children || []) findOverrides(child);
   }
   findOverrides(node);
-
-  // Generate clean JSX / HTML snippet
-  const propPairs = Object.entries(variantProps)
-    .map(([k, v]) => `${k.toLowerCase()}="${v}"`)
-    .join(" ");
-  const attrStr = propPairs ? ` ${propPairs}` : "";
-  const innerText = extractedProps.label || extractedProps.text || "";
-  const codeSnippet = innerText
-    ? `<${componentSetName}${attrStr}>${innerText}</${componentSetName}>`
-    : `<${componentSetName}${attrStr} />`;
+  const codeSnippet = `Map Figma component ${JSON.stringify(componentSetName)} to your code component. Figma properties: ${JSON.stringify(componentProperties)}. Confirm code prop names/types; layer-name inferences are not an API contract.`;
 
   return {
     isSharedComponent: true,
@@ -531,44 +525,177 @@ function inspectComponentInstance(node) {
     ...(variants.unassigned ? { unassignedVariantLabels: variants.unassigned } : {}),
     ...(variants.source ? { variantMetadataSource: variants.source, variantRawName: variants.rawName, variantNormalizedName: variants.normalizedName } : {}),
     description: compSet?.description || mainComp.description || "",
-    extractedProps: extractedProps,
+    componentProperties,
+    componentPropertyDefinitions,
+    propertySource: 'figma-component-properties',
+    inferredTextProps,
+    ...(propertyWarnings.length ? { propertyWarnings } : {}),
     recommendedUsage: codeSnippet,
-    reuseDirective: `REUSE DIRECTIVE: Use shared component <${componentSetName}> with variant ${JSON.stringify(variantProps)}. Do NOT create a custom ad-hoc component.`
+    reuseDirective: `Find the code component matching Figma ${JSON.stringify(componentSetName)} and map its official Figma properties to the verified code API. Variant metadata source: ${variants.source || 'figma'}.`
   };
 }
 
-// Generate Google Fonts links from font families and weights
+// Generate Google Fonts links (unverified candidates only)
+function recordFontUsage(fonts, font, weight) {
+  if (!font || typeof font !== 'object' || !font.family) return;
+  if (!fonts[font.family]) fonts[font.family] = {};
+  const usage = fonts[font.family][weight];
+  const styles = usage && typeof usage === 'object' ? usage : {};
+  styles[/italic|oblique/i.test(font.style || '') ? 'italic' : 'normal'] = true;
+  fonts[font.family][weight] = styles;
+}
+
+// Font availability/licensing cannot be inferred from a Figma family name.
 function generateFontGuides(fontsMap) {
-  const families = [];
   const details = [];
-
+  const families = [];
   for (const [family, weightsObj] of Object.entries(fontsMap)) {
-    const weights = Object.keys(weightsObj).sort();
-    details.push({
-      family: family,
-      weights: weights
-    });
-    const formattedFamily = family.replace(/ /g, "+");
-    const weightStr = weights.length > 0 ? `:wght@${weights.join(";")}` : "";
-    families.push(`family=${formattedFamily}${weightStr}`);
+    const weights = Object.keys(weightsObj).sort((a, b) => Number(a) - Number(b));
+    const variants = [];
+    for (const weight of weights) {
+      const usage = weightsObj[weight];
+      if (usage === true || usage.normal) variants.push({ weight, italic: false });
+      if (usage && usage.italic) variants.push({ weight, italic: true });
+    }
+    variants.sort((a, b) => Number(a.italic) - Number(b.italic) || Number(a.weight) - Number(b.weight));
+    details.push({ family, weights, variants, availability: 'unverified' });
+    const axes = variants.map(v => `${v.italic ? 1 : 0},${v.weight}`).join(';');
+    families.push(`family=${encodeURIComponent(family).replace(/%20/g, '+')}:ital,wght@${axes}`);
   }
-
-  if (families.length === 0) {
-    families.push("family=IBM+Plex+Sans:wght@400;500;600;700");
-  }
-
-  const googleFontUrl = `https://fonts.googleapis.com/css2?${families.join("&")}&display=swap`;
   return {
     fonts: details,
-    googleFontUrl: googleFontUrl,
-    htmlLinkTag: `<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link href="${googleFontUrl}" rel="stylesheet">`,
-    cssImportRule: `@import url('${googleFontUrl}');`,
-    cssFontFamilyStack: `"IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
+    googleFontUrl: null,
+    googleFontsCandidateUrl: families.length ? `https://fonts.googleapis.com/css2?${families.join('&')}&display=swap` : null,
+    warning: 'Font availability and licensing are unverified. Load the actual font files or verify every family/variant on Google Fonts before using the candidate URL. No font is downloaded by this exporter.',
+    htmlLinkTag: '<!-- Load verified font files or a verified provider stylesheet here. -->',
+    cssImportRule: '/* Add @font-face or a verified provider import before using this stack. */',
+    cssFontFamilyStack: [...details.map(font => JSON.stringify(font.family)), 'sans-serif'].join(', ')
   };
+}
+
+// Preserve Figma identities separately from resolved CSS values (names are not unique).
+async function extractTokenReferences(node, nodeItem, context) {
+  const catalog = context.designTokens.namedTokens || (context.designTokens.namedTokens = {});
+  const references = [];
+  const warnings = [];
+  const cache = context.tokenVariableCache || (context.tokenVariableCache = new Map());
+  const expanded = context.tokenAliasesExpanded || (context.tokenAliasesExpanded = new Set());
+  async function variableGraph(id, path = new Set()) {
+    const tokenId = `variable:${id}`;
+    if (path.has(id)) {
+      const message = `Variable alias cycle: ${[...path, id].join(' -> ')}`;
+      warnings.push(message);
+      catalog[tokenId].warnings = [...new Set([...(catalog[tokenId].warnings || []), message])];
+      return cache.get(id);
+    }
+    if (path.size >= 64) { warnings.push(`Variable alias depth limit reached: ${id}`); return null; }
+    if (!cache.has(id)) {
+      try {
+        const value = await figma.variables.getVariableByIdAsync(id);
+        if (!value) throw new Error('Variable unavailable');
+        cache.set(id, value);
+        catalog[tokenId] = { source: 'figma-variable', id: value.id, key: value.key, name: value.name, resolvedType: value.resolvedType, collectionId: value.variableCollectionId, valuesByMode: value.valuesByMode };
+        if (figma.variables.getVariableCollectionByIdAsync) {
+          const collections = context.designTokens.variableCollections || (context.designTokens.variableCollections = {});
+          if (!collections[value.variableCollectionId]) {
+            try {
+              const collection = await figma.variables.getVariableCollectionByIdAsync(value.variableCollectionId);
+              if (!collection) throw new Error('Collection unavailable');
+              collections[value.variableCollectionId] = { id: collection.id, name: collection.name, modes: collection.modes, defaultModeId: collection.defaultModeId };
+            } catch (error) { collections[value.variableCollectionId] = { id: value.variableCollectionId, warning: error.message }; }
+          }
+        }
+      } catch (error) {
+        cache.set(id, null);
+        catalog[tokenId] = { source: 'figma-variable', id, unavailable: true, warning: error.message };
+      }
+    }
+    const value = cache.get(id);
+    if (!value) { warnings.push(`Variable unavailable: ${id}`); return null; }
+    if (!expanded.has(id)) {
+      const nextPath = new Set([...path, id]);
+      for (const entry of Object.values(value.valuesByMode)) {
+        if (entry && entry.type === 'VARIABLE_ALIAS') await variableGraph(entry.id, nextPath);
+      }
+      expanded.add(id);
+    }
+    return value;
+  }
+  async function variable(alias, property, range) {
+    if (!alias || alias.type !== 'VARIABLE_ALIAS') return;
+    const tokenId = `variable:${alias.id}`;
+    const ref = { tokenId, property, ...(range || {}) };
+    references.push(ref);
+    try {
+      const value = await variableGraph(alias.id);
+      if (!value) return;
+      // Resolve on the actual consumer: two nodes can use different collection modes.
+      ref.resolvedValue = value.resolveForConsumer(node).value;
+    } catch (error) { warnings.push(`${property}: ${error.message}`); }
+  }
+  async function bindings(bound, prefix, range) {
+    for (const [field, aliases] of Object.entries(bound || {})) {
+      for (const [index, alias] of (Array.isArray(aliases) ? aliases : [aliases]).entries()) {
+        await variable(alias, `${prefix}${field}${Array.isArray(aliases) ? `[${index}]` : ''}`, range);
+      }
+    }
+  }
+  async function paints(values, property, range) {
+    if (!Array.isArray(values)) return;
+    for (const [index, paint] of values.entries()) {
+      if (paint.visible === false) continue;
+      await bindings(paint.boundVariables, `${property}[${index}].`, range);
+      for (const [stop, value] of (paint.gradientStops || []).entries()) {
+        await bindings(value.boundVariables, `${property}[${index}].gradientStops[${stop}].`, range);
+      }
+    }
+  }
+  async function style(id, property, range) {
+    if (typeof id !== 'string' || !id) return;
+    const tokenId = `style:${id}`;
+    references.push({ tokenId, property, ...(range || {}) });
+    try {
+      const value = await figma.getStyleByIdAsync(id);
+      if (!value) throw new Error('Style unavailable');
+      const entry = { source: 'figma-style', id: value.id, key: value.key, name: value.name, styleType: value.type, description: value.description };
+      if (value.type === 'PAINT') entry.paints = value.paints;
+      if (value.type === 'TEXT') {
+        for (const field of ['fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'paragraphSpacing', 'paragraphIndent', 'textCase', 'textDecoration']) entry[field] = value[field];
+      }
+      catalog[tokenId] = entry;
+      await bindings(value.boundVariables, `${property}.`, range);
+      if (value.type === 'PAINT') await paints(value.paints, property, range);
+    } catch (error) { warnings.push(`${property}: ${error.message}`); }
+  }
+  await style(node.fillStyleId, 'fillStyle');
+  await style(node.strokeStyleId, 'strokeStyle');
+  await style(node.textStyleId, 'textStyle');
+  await bindings(node.boundVariables, '');
+  for (const [name, property] of Object.entries(nodeItem.component?.componentProperties || {})) {
+    await bindings(property.boundVariables, `componentProperties.${name}.`);
+  }
+  for (const [name, definition] of Object.entries(nodeItem.component?.componentPropertyDefinitions || {})) {
+    await bindings(definition.boundVariables, `componentPropertyDefinitions.${name}.`);
+  }
+  await paints(node.fills, 'fills');
+  await paints(node.strokes, 'strokes');
+  if (node.type === 'TEXT' && node.characters) {
+    // Style/fill differences can exist even when font metrics are uniform.
+    const segments = node.getStyledTextSegments(['textStyleId', 'fillStyleId', 'fills', 'boundVariables']);
+    for (const run of segments) {
+      const range = { start: run.start, end: run.end };
+      await style(run.textStyleId, 'textStyle', range);
+      await style(run.fillStyleId, 'fillStyle', range);
+      await bindings(run.boundVariables, '', range);
+      await paints(run.fills, 'fills', range);
+    }
+  }
+  if (references.length) nodeItem.tokenReferences = references;
+  if (warnings.length) nodeItem.tokenWarnings = [...new Set(warnings)];
 }
 
 // Deep recursive DOM Tree Extractor
-async function extractDetailedNodeTree(node, context, parentNode = null) {
+async function extractDetailedNodeTree(node, context, parentNode = null, metadataOnly = false) {
   let nativeCss = {};
   if ("getCSSAsync" in node) {
     try {
@@ -596,6 +723,21 @@ async function extractDetailedNodeTree(node, context, parentNode = null) {
     cssString: formatCssBlock(computedCss)
   };
 
+  try {
+    if (node.componentPropertyReferences) nodeItem.componentPropertyReferences = node.componentPropertyReferences;
+  } catch (error) { nodeItem.componentPropertyWarning = error.message; }
+
+  const strokeInfo = inspectStrokes(node);
+  if (strokeInfo) nodeItem.stroke = strokeInfo;
+
+  const gradients = Array.isArray(node.fills) ? node.fills.filter(fill => fill.visible !== false && fill.type.startsWith('GRADIENT')) : [];
+  if (gradients.length) {
+    nodeItem.gradientFills = gradients;
+    if (!nativeCss.background && !nativeCss['background-image'] && !(node.type === 'TEXT' && nativeCss.color)) {
+      nodeItem.cssWarnings = ['Gradient geometry is preserved in gradientFills; native gradient CSS was unavailable. Use the screenshot or asset rather than guessing a CSS gradient.'];
+    }
+  }
+
   // 1. REUSABLE COMPONENT IDENTIFICATION
   if (node.type === "INSTANCE") {
     const compInfo = inspectComponentInstance(node);
@@ -610,7 +752,7 @@ async function extractDetailedNodeTree(node, context, parentNode = null) {
           totalUsageCount: 0,
           variantsEncountered: [],
           sampleUsages: [],
-          reuseRules: `Always reuse <${setName}>. Do not write duplicate CSS or markup.`
+          reuseRules: `Find the code component matching Figma ${JSON.stringify(setName)}. Verify the code API before mapping Figma properties.`
         };
       }
       context.componentsUsed[setName].totalUsageCount++;
@@ -634,7 +776,9 @@ async function extractDetailedNodeTree(node, context, parentNode = null) {
           nodeName: node.name,
           variant: compInfo.variantProperties,
           ...(compInfo.unassignedVariantLabels ? { unassignedVariantLabels: compInfo.unassignedVariantLabels, variantMetadataSource: compInfo.variantMetadataSource } : {}),
-          props: compInfo.extractedProps,
+          props: compInfo.componentProperties,
+          propertySource: compInfo.propertySource,
+          inferredTextProps: compInfo.inferredTextProps,
           recommendedSnippet: compInfo.recommendedUsage
         });
       }
@@ -649,6 +793,7 @@ async function extractDetailedNodeTree(node, context, parentNode = null) {
       ...(variants.warning ? { variantWarning: variants.warning } : {}),
     ...(variants.unassigned ? { unassignedVariantLabels: variants.unassigned } : {}),
     ...(variants.source ? { variantMetadataSource: variants.source, variantRawName: variants.rawName, variantNormalizedName: variants.normalizedName } : {}),
+      componentPropertyDefinitions: (() => { try { return (compSet || node).componentPropertyDefinitions || {}; } catch (error) { return { unavailable: error.message }; } })(),
       description: node.description || ""
     };
   }
@@ -678,45 +823,43 @@ async function extractDetailedNodeTree(node, context, parentNode = null) {
     const fontFamily = (font && typeof font === "object") ? font.family : "mixed";
     const fontStyle = (font && typeof font === "object") ? font.style : "mixed";
     
-    // Numeric weight mapping
-    let weightNum = "400";
-    const s = fontStyle.toLowerCase();
-    if (s.includes("black")) weightNum = "900";
-    else if (s.includes("extra bold")) weightNum = "800";
-    else if (s.includes("bold")) weightNum = "700";
-    else if (s.includes("semi")) weightNum = "600";
-    else if (s.includes("medium")) weightNum = "500";
-    else if (s.includes("light")) weightNum = "300";
+    const weightNum = typeof node.fontWeight === 'number'
+      ? fontWeightNumber(font, node.fontWeight)
+      : computedCss['font-weight'] || fontWeightNumber(font);
 
-    if (fontFamily !== "mixed" && !context.fontsUsed[fontFamily]) {
-      context.fontsUsed[fontFamily] = {};
-    }
-    if (fontFamily !== "mixed") context.fontsUsed[fontFamily][weightNum] = true;
+    recordFontUsage(context.fontsUsed, font, weightNum);
 
     const typo = {
       fontFamily: fontFamily,
       fontWeight: fontStyle,
       fontWeightNum: weightNum,
       fontSize: typeof node.fontSize === "number" ? node.fontSize : "mixed",
-      lineHeight: node.lineHeight === figma.mixed ? "mixed" : node.lineHeight ? (node.lineHeight.value ?? "AUTO") : "AUTO",
-      letterSpacing: node.letterSpacing === figma.mixed ? "mixed" : node.letterSpacing ? (node.letterSpacing.value ?? 0) : 0,
+      lineHeight: node.lineHeight === figma.mixed ? "mixed" : node.lineHeight || { unit: "AUTO" },
+      letterSpacing: node.letterSpacing === figma.mixed ? "mixed" : node.letterSpacing || { unit: "PIXELS", value: 0 },
       textAlign: node.textAlignHorizontal || "LEFT",
       color: computedCss.color || "#101828"
     };
     nodeItem.typography = typo;
-    // Figma uses a Symbol for mixed text properties; retain the actual per-range styles.
-    if ([node.fontName, node.fontSize, node.lineHeight, node.letterSpacing].includes(figma.mixed)) {
-      nodeItem.textRuns = node.getStyledTextSegments(["fontName", "fontSize", "lineHeight", "letterSpacing"]);
-      for (const run of nodeItem.textRuns) {
-        const style = run.fontName.style.toLowerCase();
-        const weights = [["black", "900"], ["extra bold", "800"], ["semi", "600"], ["bold", "700"], ["medium", "500"], ["light", "300"]];
-        const weight = (weights.find(([name]) => style.includes(name)) || [null, "400"])[1];
-        if (!context.fontsUsed[run.fontName.family]) context.fontsUsed[run.fontName.family] = {};
-        context.fontsUsed[run.fontName.family][weight] = true;
-      }
+    // Always segment: color/decoration can differ even with uniform font metrics.
+    nodeItem.textRuns = node.getStyledTextSegments(["fontName", "fontWeight", "fontSize", "lineHeight", "letterSpacing", "fills", "textDecoration", "textCase", "textStyleId", "fillStyleId"]);
+    for (const run of nodeItem.textRuns) {
+      const weight = fontWeightNumber(run.fontName, run.fontWeight);
+      recordFontUsage(context.fontsUsed, run.fontName, weight);
+      const runTypography = {
+        fontFamily: run.fontName.family, fontWeight: run.fontName.style, fontWeightNum: weight,
+        fontSize: run.fontSize, lineHeight: run.lineHeight, letterSpacing: run.letterSpacing,
+        fills: run.fills, textDecoration: run.textDecoration, textCase: run.textCase,
+        textStyleId: run.textStyleId, fillStyleId: run.fillStyleId
+      };
+      context.designTokens.typography[JSON.stringify(runTypography)] = runTypography;
     }
-    const typoKey = `${typo.fontFamily} ${typo.fontWeight} ${typo.fontSize}px`;
-    context.designTokens.typography[typoKey] = typo;
+    context.designTokens.typography[JSON.stringify(typo)] = typo;
+  }
+
+  try {
+    await extractTokenReferences(node, nodeItem, context);
+  } catch (error) {
+    nodeItem.tokenWarnings = [...(nodeItem.tokenWarnings || []), `Token metadata incomplete: ${error.message}`];
   }
 
   // 4. COLOR & EFFECT TOKENS
@@ -745,7 +888,7 @@ async function extractDetailedNodeTree(node, context, parentNode = null) {
 
   const shouldExportAsSvg = (isVectorType || isSmallIconContainer || (isExplicitIconName && node.width <= 120 && node.height <= 120)) && node.type !== "TEXT";
 
-  if (shouldExportAsSvg && node.width > 0 && node.height > 0) {
+  if (!metadataOnly && shouldExportAsSvg && node.width > 0 && node.height > 0) {
     try {
       const svgBytes = await node.exportAsync({ format: "SVG" });
       const svgCode = decodeUtf8(svgBytes);
@@ -792,34 +935,34 @@ async function extractDetailedNodeTree(node, context, parentNode = null) {
   }
 
   // 6. IMAGE EXPORT (PNG)
-  // 6a. Fill type == IMAGE (Figma native image hashes)
-  if ("fills" in node && Array.isArray(node.fills)) {
-    for (const fill of node.fills) {
-      if (fill.type === "IMAGE" && fill.imageHash) {
-        try {
-          const img = figma.getImageByHash(fill.imageHash);
-          if (img) {
-            const bytes = await img.getBytesAsync();
-            const b64 = bufferToBase64(bytes);
-            const assetFileName = `assets/img_${sanitizeFilename(node.name)}_${fill.imageHash.substring(0, 10)}.png`;
-            context.assets.push({
-              name: assetFileName,
-              type: "base64",
-              content: b64
-            });
-            context.assetsManifest.push({
-              filename: assetFileName,
-              format: "PNG",
-              nodeId: node.id,
-              nodeName: node.name,
-              dimensions: `${node.width}×${node.height}px`,
-              purpose: "Image fill (Photo / Illustration)"
-            });
-            nodeItem.assetImage = assetFileName;
-          }
-        } catch (e) {}
+  // 6a. Preserve original image bytes and Figma crop/transform separately.
+  if (!metadataOnly && Array.isArray(node.fills)) {
+    nodeItem.imageFills = [];
+    for (const [index, fill] of node.fills.entries()) {
+      if (fill.type !== 'IMAGE' || fill.visible === false || !fill.imageHash) continue;
+      const imageFill = { index, ...fill, nodeSize: { width: node.width, height: node.height } };
+      nodeItem.imageFills.push(imageFill);
+      try {
+        const img = figma.getImageByHash(fill.imageHash);
+        if (!img) throw new Error('Image unavailable');
+        const bytes = await img.getBytesAsync();
+        const format = imageFormat(bytes);
+        const assetFileName = `assets/img_${sanitizeFilename(node.name)}_${fill.imageHash}.${format.extension}`;
+        imageFill.asset = assetFileName;
+        imageFill.sourceSize = await img.getSizeAsync();
+        context.assets.push({ name: assetFileName, type: 'base64', content: bufferToBase64(bytes) });
+        context.assetsManifest.push({
+          filename: assetFileName, format: format.name, nodeId: node.id, nodeName: node.name,
+          dimensions: `${imageFill.sourceSize.width}×${imageFill.sourceSize.height}px`,
+          nodeDimensions: `${node.width}×${node.height}px`,
+          purpose: 'Original image bytes; apply imageFills crop/scale/transform to match the design'
+        });
+        if (!nodeItem.assetImage) nodeItem.assetImage = assetFileName;
+      } catch (error) {
+        imageFill.warning = error.message;
       }
     }
+    if (!nodeItem.imageFills.length) delete nodeItem.imageFills;
   }
 
   // 6b. Named raster / illustration / photo / hero / campus image frames (rendered as 2x PNG)
@@ -827,7 +970,7 @@ async function extractDetailedNodeTree(node, context, parentNode = null) {
                       node.width >= 100 && node.height >= 80 &&
                       !shouldExportAsSvg && node.type !== "TEXT";
 
-  if (isImageNode && !nodeItem.assetImage) {
+  if (!metadataOnly && isImageNode && !nodeItem.assetImage) {
     try {
       const pngBytes = await node.exportAsync({
         format: "PNG",
@@ -852,14 +995,13 @@ async function extractDetailedNodeTree(node, context, parentNode = null) {
     } catch (e) {}
   }
 
-  // 7. RECURSIVE CHILDREN
-  // If this container is already exported as a coherent atomic SVG icon, avoid bloating the tree with internal vector paths!
-  const shouldSkipChildren = !!nodeItem.assetSvg;
-  if ("children" in node && !shouldSkipChildren) {
-    nodeItem.children = [];
+  // SVG children remain source metadata, not duplicate DOM/assets to render.
+  if ('children' in node) {
+    const key = nodeItem.assetSvg ? 'sourceChildren' : 'children';
+    nodeItem[key] = [];
     for (const child of node.children) {
       if (child.visible !== false) {
-        nodeItem.children.push(await extractDetailedNodeTree(child, context, node));
+        nodeItem[key].push(await extractDetailedNodeTree(child, context, node, metadataOnly || !!nodeItem.assetSvg));
       }
     }
   }
@@ -900,8 +1042,8 @@ function generateMarkdownDoc(tree, componentsUsed, designTokens, fontGuide, asse
   md += `\n`;
 
   // 2. FONT & TYPOGRAPHY SETUP
-  md += `## 🔤 2. Font & Typography Setup (Google Fonts Auto-Resolver)\n`;
-  md += `Màn hình này sử dụng các font sau đây. Agent chỉ cần nhúng mã dưới đây vào HTML/CSS để load đúng 100% font:\n\n`;
+  md += `## 🔤 2. Font & Typography Setup\n`;
+  md += `Verify font availability and licensing, then load the actual families and variants listed in fonts_guide.json. Provider URLs are suggestions, not verified downloads:\n\n`;
   md += `### HTML \`<head>\` Embed Code:\n\`\`\`html\n${fontGuide.htmlLinkTag}\n\`\`\`\n\n`;
   md += `### CSS \`@import\` Rule:\n\`\`\`css\n${fontGuide.cssImportRule}\n\nbody {\n  font-family: ${fontGuide.cssFontFamilyStack};\n}\n\`\`\`\n\n`;
 
@@ -931,6 +1073,11 @@ function generateMarkdownDoc(tree, componentsUsed, designTokens, fontGuide, asse
 
   // 5. DESIGN TOKENS
   md += `## 🎨 5. Design Tokens (Colors & Typography)\n`;
+  md += `### Named Figma tokens:\n`;
+  for (const [id, token] of Object.entries(designTokens.namedTokens || {})) {
+    md += `- ${JSON.stringify(token.name)} — ${token.source}, ID: ${id}\n`;
+  }
+  md += `See design_tokens.json for source values/modes and spec.json tokenReferences for per-node usage and resolved variable values.\n\n`;
   md += `### Colors:\n`;
   for (const c of Object.keys(designTokens.colors)) {
     md += `- \`${c}\`\n`;
@@ -939,7 +1086,7 @@ function generateMarkdownDoc(tree, componentsUsed, designTokens, fontGuide, asse
   md += `| Font Family | Style / Weight | Size | Line Height | Color |\n`;
   md += `| :--- | :--- | :--- | :--- | :--- |\n`;
   for (const [k, t] of Object.entries(designTokens.typography)) {
-    md += `| ${t.fontFamily} | ${t.fontWeight} | ${t.fontSize}px | ${t.lineHeight} | \`${t.color}\` |\n`;
+    md += `| ${t.fontFamily} | ${t.fontWeight} | ${t.fontSize}px | ${JSON.stringify(t.lineHeight)} | \`${t.color}\` |\n`;
   }
   md += `\n`;
 
@@ -969,6 +1116,7 @@ function generateMarkdownDoc(tree, componentsUsed, designTokens, fontGuide, asse
 
 // Generate HTML preview & code snippet cheatsheet for reused components
 function generateComponentSnippetsHtml(screenName, componentsUsed, fontGuide) {
+  const escape = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   let html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1007,14 +1155,14 @@ function generateComponentSnippetsHtml(screenName, componentsUsed, fontGuide) {
         <tr>
           <td><strong>${sample.nodeName}</strong></td>
           <td><code>${JSON.stringify(sample.variant)}</code></td>
-          <td><code>${sample.recommendedSnippet}</code></td>
+          <td><code>${escape(sample.recommendedSnippet)}</code></td>
         </tr>
 `;
     }
     html += `
       </tbody>
     </table>
-    <div class="code-box">${comp.sampleUsages[0]?.recommendedSnippet || ""}</div>
+    <div class="code-box">${escape(comp.sampleUsages[0]?.recommendedSnippet || "")}</div>
   </div>
 `;
   }
@@ -1042,7 +1190,7 @@ async function exportScreenNode(node, currentPath, scale) {
   const identity = exportIdentity(node);
   // JSON_REST captures the resolved subtree before expensive image rendering.
   const snapshot = await node.exportAsync({ format: "JSON_REST_V1" });
-  const check = await checkScreen(identity, JSON.stringify({ version: 1, scale, snapshot }));
+  const check = await checkScreen(identity, JSON.stringify({ version: 5, scale, snapshot }));
   if (!forceExport && check.unchanged) {
     sendUI({ type: "PROGRESS_UPDATE", message: `⏭ Không đổi: ${node.name}` });
     return;
@@ -1057,6 +1205,7 @@ async function exportScreenNode(node, currentPath, scale) {
     componentsUsed: {},
     fontsUsed: {},
     designTokens: {
+      namedTokens: {},
       colors: {},
       typography: {},
       radii: {},

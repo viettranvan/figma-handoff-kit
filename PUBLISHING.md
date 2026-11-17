@@ -1,6 +1,6 @@
-# Release 0.2.3
+# Release 0.2.4
 
-This document prepares the release; it does not mean npm 0.2.3 or a Figma Community listing has been published.
+This document describes release validation and npm CI publishing. A version change in source is not proof that the registry release succeeded.
 
 ## Validate the release
 
