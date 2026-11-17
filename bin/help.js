@@ -95,11 +95,43 @@ EXAMPLES
 Requires Figma Desktop on macOS/Windows for development import.
 Import manually once; npm cannot register the plugin automatically.
 `;
+  const setup = `USAGE
+  figma-handoff setup
+
+Install or update the CLI and plugin at a fixed user path (macOS/Linux):
+  ~/.local/share/figma-handoff-kit/node_modules/figma-handoff-kit
+Launchers: ~/.local/bin/figma-handoff and ~/.local/bin/figma-export.
+
+Downloads the latest published version. No sudo or npm prefix config changes.
+Keep ~/.local/bin before nvm paths. Uses Node >=20 from the current PATH.
+Re-import the manifest once after migration; updates keep the same path.
+Stop the bridge and close the plugin before updating.
+
+EXAMPLES
+  figma-handoff setup
+`;
+  const projects = `USAGE
+  figma-handoff projects
+  figma-handoff projects remove [project-path]
+
+List registered projects or select one to unregister. Removal requires an
+interactive terminal and confirmation. Stop the selected project's bridge first.
+Checks the port from FIGMA_EXPORT_PORT (default 3055); stop any bridge for this
+project on other ports too. Exports, project folders and legacy config are kept.
+Legacy config cannot silently register a removed project again; use init explicitly.
+
+EXAMPLES
+  figma-handoff projects
+  figma-handoff projects remove
+  figma-handoff projects remove /path/to/project
+`;
   const overview = `USAGE
   figma-handoff <command> [options]
 
 COMMANDS
   start               Start the local bridge; select or add a project.
+  projects            List projects or remove a registration.
+  setup               Install/update at a fixed user path (macOS/Linux).
   plugin              Show the plugin manifest and import instructions.
   sync                Export once from Figma to local files (requires opt-in).
   help [command]      Show general or command-specific help.
@@ -128,5 +160,5 @@ MORE HELP
   figma-handoff plugin --help
   figma-handoff sync --help
 `;
-  return intro + '\n' + (command === 'init' ? init : (command === 'start' || command === 'serve') ? serve : command === 'open' ? open : command === 'sync' ? sync : command === 'plugin' ? plugin : overview);
+  return intro + '\n' + (command === 'projects' ? projects : command === 'setup' ? setup : command === 'init' ? init : (command === 'start' || command === 'serve') ? serve : command === 'open' ? open : command === 'sync' ? sync : command === 'plugin' ? plugin : overview);
 }

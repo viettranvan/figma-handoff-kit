@@ -28,8 +28,9 @@ Manifest: ${pluginManifest}
 5. Download ZIP, or run figma-handoff start and choose Save to project.
 
 Import once per computer. npm installation does not register plugins in Figma.
-After updating npm: restart the bridge and reopen the plugin. If you change
-Node installations or remove this package, import again from its new path.
+After updating: restart the bridge and reopen the plugin. User installation
+(figma-handoff setup) keeps this path stable across Node changes. Re-import
+once when migrating from npm global, or if you move/remove the installation.
 Can view only? Use an editable file/copy or ask the owner for edit access.
 Organization policy may also require plugin approval.
 

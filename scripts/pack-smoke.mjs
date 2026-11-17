@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { installForUser } from '../bin/user-install.js';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, realpathSync, readFileSync, existsSync, rmSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -21,6 +22,10 @@ try {
     assert.ok(existsSync(manifest));
     assert.ok(manifest.startsWith(temp), 'Manifest must belong to the installed archive');
   }
+  const user = installForUser({ home: join(temp, 'user home'), packageSpec: archive });
+  const launcher = join(user.bin, 'figma-handoff');
+  assert.equal(execFileSync(launcher, ['--version'], { encoding: 'utf8' }).trim(), pkg.version);
+  assert.equal(execFileSync(launcher, ['plugin', '--path'], { encoding: 'utf8' }).trim(), user.manifest);
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }

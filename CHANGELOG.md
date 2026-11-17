@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.5
+
+- Add project listing and confirmed unregistration, preserving exports and preventing silent re-registration from legacy configuration.
+
+- Add macOS/Linux fixed-user installation and updates via `figma-handoff setup`, stable manifest paths and launchers independent of the nvm installation path.
+
 ## 0.2.4
 
 - Preserve full stroke metadata and native CSS; only generate safe inside-solid box border fallbacks.
