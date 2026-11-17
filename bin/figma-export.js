@@ -27,7 +27,14 @@ function findConfig() {
 }
 try {
   const command = args[0];
-  if (!command || args.includes('--help') || args.includes('-h')) {
+  const commands = ['start', 'serve', 'plugin', 'sync', 'init', 'open'];
+  if (command === '--version') {
+    if (args.length !== 1) throw new Error('Usage: figma-handoff --version');
+    console.log(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
+  } else if (command === 'help') {
+    if (args.length > 2 || (args[1] && !commands.includes(args[1]))) throw new Error('Usage: figma-handoff help [start|serve|plugin|sync|init|open]');
+    console.log(help(args[1]));
+  } else if (!command || args.includes('--help') || args.includes('-h')) {
     console.log(help(command));
   } else if (command === 'plugin') {
     await showPlugin(args.slice(1));
@@ -40,7 +47,7 @@ try {
       console.log('Existing configuration registered globally; legacy file was left unchanged.');
     } else {
       const project = await addProject(root, option('--output-dir') ?? (process.stdin.isTTY ? undefined : 'figma/exports'));
-      console.log(`Project registered globally.\nExports: ${resolve(root, project.outputDir)}\nRun figma-handoff serve to start.`);
+      console.log(`Project registered globally.\nExports: ${resolve(root, project.outputDir)}\nRun figma-handoff start to launch the bridge.`);
     }
   } else if (command === 'sync') {
     const project = await chooseProject(args.includes('--select'));
@@ -48,7 +55,7 @@ try {
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid bridge port.');
     const base = `http://127.0.0.1:${port}`;
     const health = await fetch(base+'/health', {signal:AbortSignal.timeout(3000)}).then(r=>r.json());
-    if (health.project_id !== project.projectId) throw new Error('Bridge is serving a different project. Run serve --select first.');
+    if (health.project_id !== project.projectId) throw new Error('Bridge is serving a different project. Run figma-handoff start --select first.');
     const response = await fetch(base+'/sync/start', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project_id:project.projectId}),signal:AbortSignal.timeout(3000)});
     const started = await response.json();
     if (!response.ok) throw new Error(started.error || 'Start failed; update bridge and plugin.');
@@ -63,7 +70,7 @@ try {
       if(!status.connected) throw new Error('Plugin disconnected; reopen it before retrying.');
       if(Date.now()+1000>=deadline) throw new Error('Sync timed out; inspect the plugin before retrying.');
     }
-  } else if (command === 'serve'  || command === 'open') {
+  } else if (command === 'start' || command === 'serve' || command === 'open') {
     const configPath = findConfig();
     let project;
     if (configPath && !args.includes('--select')) {
@@ -84,7 +91,7 @@ try {
     await ensurePortAvailable(port);
     const server = createBridge({ output, projectId: config.projectId, root });
     server.on('error', error => {
-      console.error(error.code === 'EADDRINUSE' ? `Port ${port} became busy. Run serve again.` : error.message);
+      console.error(error.code === 'EADDRINUSE' ? `Port ${port} became busy. Run figma-handoff start again.` : error.message);
       process.exitCode = 1;
     });
     server.listen(port, '127.0.0.1', async () => {
@@ -98,4 +105,4 @@ try {
     console.error(`Unknown command: ${command}\nRun figma-handoff --help for usage.`);
     process.exitCode = 1;
   }
-} catch (err) { console.error(args[0] === 'sync' && /fetch failed/.test(err.message) ? 'Cannot reach the bridge. Run figma-handoff serve for this project, then enable CLI sync in the plugin.' : err.message); process.exitCode = 1; }
+} catch (err) { console.error(args[0] === 'sync' && /fetch failed/.test(err.message) ? 'Cannot reach the bridge. Run figma-handoff start for this project, then enable CLI sync in the plugin.' : err.message); process.exitCode = 1; }

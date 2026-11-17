@@ -1,6 +1,6 @@
 {
-  "name": "@viettran210/figma-handoff-kit",
-  "version": "0.2.2",
+  "name": "figma-handoff-kit",
+  "version": "0.2.3",
   "description": "Figma plugin and local CLI for exporting design specs, assets, and tokens",
   "type": "module",
   "bin": {

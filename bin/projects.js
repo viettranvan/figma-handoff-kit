@@ -44,7 +44,7 @@ export async function chooseProject(forceSelect = false) {
   const projects = readProjects();
   const matches = projects.filter(p => { const rel = relative(p.root, process.cwd()); return !isAbsolute(rel) && rel !== '..' && !rel.startsWith('../') && !rel.startsWith('..\\'); }).sort((a,b) => b.root.length - a.root.length);
   if (!forceSelect && matches.length) return validateProject(matches[0]);
-  if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error('No current project. Run serve in a terminal to select a project, or run init first.');
+  if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error('No current project. Run figma-handoff start in a terminal to select a project, or run init first.');
   const value = answer(await select({
     message: 'Choose a project',
     options: [...projects.map(p => ({ value: p.root, label: basename(p.root), hint: `${p.root} → ${p.outputDir}` })), { value: '__add__', label: 'Add a new project' }]

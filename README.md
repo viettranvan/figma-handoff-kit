@@ -12,8 +12,8 @@ Two export destinations are available in the Figma plugin:
 Requires **Node.js 20 or later** on macOS, Windows or Linux. Python is not required.
 
 ```sh
-npm install -g @viettran210/figma-handoff-kit
-figma-handoff serve
+npm install -g figma-handoff-kit
+figma-handoff start
 ```
 
 Choose a registered project, or **Add a new project** and enter its folder and output directory. The default output is `figma/exports`; for an ignored docs folder, choose `docs/figma`.
@@ -23,13 +23,13 @@ Optional registration from a repository root:
 ```sh
 cd /path/to/project
 figma-handoff init --output-dir docs/figma
-figma-handoff serve
+figma-handoff start
 ```
 
 To choose a different project from anywhere:
 
 ```sh
-figma-handoff serve --select
+figma-handoff start --select
 ```
 
 `figma-export` remains a compatibility alias for `figma-handoff`.
@@ -42,7 +42,7 @@ The plugin is **not yet published to Figma Community**. For now, use Figma Deskt
 2. Open an editable Design file in **Figma Desktop** (macOS/Windows). Choose **Plugins → Development → Import plugin from manifest…** and select the displayed `manifest.json`.
 3. On macOS press **Cmd+Shift+G** in the file picker and paste the full path. On Windows paste it into **File name**. `figma-handoff plugin --path` prints just that path.
 4. Run **Plugins → Development → Figma Handoff Kit**. Keep `manifest.json`, `code.js` and `ui.html` together.
-5. Choose Download ZIP, or run `figma-handoff serve`, choose your project and select Save to project.
+5. Choose Download ZIP, or run `figma-handoff start`, choose your project and select Save to project.
 
 Development import is once per computer and requires Desktop; the browser does not import local manifests. If you only have Can view, use an editable file/copy or ask for edit access. Organization plugin policy may require administrator approval. After npm updates, restart the bridge and reopen the plugin. If a Node version manager changes the package location, import the manifest again from the new path.
 
@@ -60,7 +60,7 @@ Every ZIP export renders the selected screens again. ZIP mode does not read loca
 
 ## Save directly into a project
 
-1. Run `figma-handoff serve` on the **same computer** as Figma and leave the terminal open.
+1. Run `figma-handoff start` on the **same computer** as Figma and leave the terminal open.
 2. Choose **Save to project** in the plugin.
 3. Check the displayed project and output directory before exporting.
 4. Choose scope and image size, then export. Stop the bridge with Ctrl+C when finished.
@@ -83,8 +83,8 @@ Shared library/style change detection still needs live Figma verification. Compo
 ```sh
 figma-handoff --help
 figma-handoff init --help
-figma-handoff serve --help
-npm install -g @viettran210/figma-handoff-kit@latest
+figma-handoff start --help
+npm install -g figma-handoff-kit
 ```
 
 Restart the bridge and reload the development plugin after updating.
@@ -118,7 +118,7 @@ macOS may request Accessibility permission for the hosting terminal and Automati
 
 ## Sync changes with one command
 
-1. Run `figma-handoff serve` in your registered project and leave this terminal open.
+1. Run `figma-handoff start` in your registered project and leave this terminal open.
 2. Open the updated plugin in the target Figma file, select **Save to project** and enable **Allow CLI sync for this file (all pages, 2×)**.
 3. From another terminal inside the registered project, run `figma-handoff sync` (or `figma-handoff sync --select`).
 
@@ -128,7 +128,7 @@ Sync sends one explicit request to the paired plugin. It exports all pages excep
 ```sh
 # Terminal 1 — leave running
 cd /path/to/project
-figma-handoff serve
+figma-handoff start
 
 # Enable Allow CLI sync in the plugin, then use terminal 2 whenever needed
 cd /path/to/project
@@ -142,9 +142,9 @@ Sync updates new/changed screens and recreates missing or modified outputs. It d
 ## Permissions and troubleshooting
 
 - **Can view on the original file:** this Design plugin needs permission to run in the file. Ask for edit access, have the designer export, or duplicate into your Drafts if the owner permits copying. A copy does not receive later changes from the original automatically.
-- **Cannot reach bridge:** run `figma-handoff serve` on the same computer, check port 3055 and local-network permissions, then Retry in the plugin.
+- **Cannot reach bridge:** run `figma-handoff start` on the same computer, check port 3055 and local-network permissions, then Retry in the plugin.
 - **Enable CLI sync first:** choose Save to project, verify the destination and enable Allow CLI sync. Repeat after restarting the bridge or plugin.
-- **Different project:** stop the old bridge, run `figma-handoff serve --select` and select the intended project. Reconnect the plugin before enabling sync.
+- **Different project:** stop the old bridge, run `figma-handoff start --select` and select the intended project. Reconnect the plugin before enabling sync.
 - **Already paired/running:** only one plugin session and one sync job are supported per bridge. Disable pairing in the other plugin, or restart the bridge if that session is unavailable.
 - **Plugin disconnected / timeout:** inspect Figma and its export log before retrying. Ctrl+C does not cancel the Figma export. Restart the bridge if an abandoned job blocks future requests.
 - **Digest error or older behavior:** update the npm package, restart the bridge and reload the updated plugin. Update both parts together.
@@ -169,3 +169,37 @@ Use `figma-handoff plugin --open` to open the installed plugin folder and displa
 On macOS, copy the path with `figma-handoff plugin --path | pbcopy`. In Figma Desktop choose Plugins → Development → Import plugin from manifest, press Cmd+Shift+G, paste the path and select it. On Windows, paste the path into the file picker's File name field. Import is a manual Figma registration step; the CLI does not bypass it or request Accessibility access.
 
 Keep using the files in the installed package rather than copying only manifest.json: code.js and ui.html must remain beside it. Updating that installation updates those files; restart the plugin and bridge. Switching Node installations changes the path and requires re-importing. A future Community release removes this local import step. The plugin command is available from npm 0.2.2.
+
+`figma-handoff serve` remains available as a compatibility alias for `figma-handoff start`.
+
+### Everyday commands
+
+```sh
+figma-handoff start           # Start bridge; select or add a project
+figma-handoff start --select  # Choose another project
+figma-handoff plugin         # Show import instructions
+figma-handoff plugin --open  # Open the plugin folder
+figma-handoff plugin --path  # Print only the manifest path
+figma-handoff sync           # Export once from Figma; requires CLI sync opt-in
+figma-handoff help start     # Help for a command
+figma-handoff --version      # Installed package version
+```
+
+Sync is one-way from Figma to local files, not a continuous watcher; it does not
+delete obsolete export folders. `init` is optional for interactive onboarding:
+`start` can register a project. `open` is an experimental macOS-only shortcut
+that starts the bridge and opens Figma. Keep the terminal open; Ctrl+C stops it.
+
+### Migrating from the scoped package
+
+Stop the bridge before switching:
+
+```sh
+npm uninstall -g @viettran210/figma-handoff-kit
+npm install -g figma-handoff-kit
+figma-handoff plugin --open
+```
+
+Import the new manifest path in Figma Desktop, then reopen the plugin and run
+`figma-handoff start`. Existing project registration and exported files are
+preserved. The old package does not automatically upgrade to the new name.

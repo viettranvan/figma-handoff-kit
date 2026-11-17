@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.3
+
+- Move the npm package from `@viettran210/figma-handoff-kit` to `figma-handoff-kit`.
+
+- Add `help [command]` and `--version`; simplify help and clarify one-way sync.
+
+- Add GitHub Actions checks and npm trusted publishing after merges to main with a new version.
+- Add `figma-handoff start` while retaining `serve`; update plugin copy commands and CLI documentation.
+
 ## 0.2.2
 
 - Preserve partial variant properties and unassigned labels when name recovery cannot determine a missing key.
