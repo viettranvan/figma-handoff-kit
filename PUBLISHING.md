@@ -1,4 +1,4 @@
-# Release 0.2.4
+# Release 0.2.5
 
 This document describes release validation and npm CI publishing. A version change in source is not proof that the registry release succeeded.
 

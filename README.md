@@ -11,10 +11,22 @@ Two export destinations are available in the Figma plugin:
 
 Requires **Node.js 20 or later** on macOS, Windows or Linux. Python is not required.
 
+On macOS/Linux (fixed user installation, available from 0.2.5):
+
 ```sh
-npm install -g figma-handoff-kit
+npx --yes --package=figma-handoff-kit@latest figma-handoff setup
+```
+
+Add `export PATH="$HOME/.local/bin:$PATH"` **after nvm initialization** in your
+shell profile (`~/.zshrc` on macOS), then open a new terminal:
+
+```sh
+figma-handoff plugin --open
 figma-handoff start
 ```
+
+On Windows, continue using `npm install -g figma-handoff-kit`; the fixed-user
+installer currently supports macOS/Linux. Node >=20 is still required.
 
 Choose a registered project, or **Add a new project** and enter its folder and output directory. The default output is `figma/exports`; for an ignored docs folder, choose `docs/figma`.
 
@@ -44,7 +56,7 @@ The plugin is **not yet published to Figma Community**. For now, use Figma Deskt
 4. Run **Plugins → Development → Figma Handoff Kit**. Keep `manifest.json`, `code.js` and `ui.html` together.
 5. Choose Download ZIP, or run `figma-handoff start`, choose your project and select Save to project.
 
-Development import is once per computer and requires Desktop; the browser does not import local manifests. If you only have Can view, use an editable file/copy or ask for edit access. Organization plugin policy may require administrator approval. After npm updates, restart the bridge and reopen the plugin. If a Node version manager changes the package location, import the manifest again from the new path.
+Development import is once per computer and requires Desktop; the browser does not import local manifests. If you only have Can view, use an editable file/copy or ask for edit access. Organization plugin policy may require administrator approval. After updates, restart the bridge and reopen the plugin. Fixed-user installation keeps the manifest path stable when changing Node versions. Import again once when migrating from npm global.
 
 Installing the CLI does not automatically install the Figma plugin. A Community installation link will be added after publication. Browser downloads and local-network access may behave differently across Figma Desktop and browsers; verify in your environment.
 
@@ -84,7 +96,7 @@ Shared library/style change detection still needs live Figma verification. Compo
 figma-handoff --help
 figma-handoff init --help
 figma-handoff start --help
-npm install -g figma-handoff-kit
+figma-handoff setup
 ```
 
 Restart the bridge and reload the development plugin after updating.
@@ -168,7 +180,7 @@ Use `figma-handoff plugin --open` to open the installed plugin folder and displa
 
 On macOS, copy the path with `figma-handoff plugin --path | pbcopy`. In Figma Desktop choose Plugins → Development → Import plugin from manifest, press Cmd+Shift+G, paste the path and select it. On Windows, paste the path into the file picker's File name field. Import is a manual Figma registration step; the CLI does not bypass it or request Accessibility access.
 
-Keep using the files in the installed package rather than copying only manifest.json: code.js and ui.html must remain beside it. Updating that installation updates those files; restart the plugin and bridge. Switching Node installations changes the path and requires re-importing. A future Community release removes this local import step. The plugin command is available from npm 0.2.2.
+Keep using the files in the installed package rather than copying only manifest.json: code.js and ui.html must remain beside it. Updating that installation updates those files; restart the plugin and bridge. With npm global, switching Node installations can change the path. The fixed-user installation keeps the path stable. A future Community release removes this local import step. The plugin command is available from npm 0.2.2.
 
 `figma-handoff serve` remains available as a compatibility alias for `figma-handoff start`.
 
@@ -305,3 +317,52 @@ SVG assets retain `sourceChildren`: source-only metadata with tokens, typography
 and component properties inside the SVG. These children are not additional DOM
 or assets to render. Export remains limited to visible nodes in the selected
 scope and their variable dependencies, not the entire unused library.
+
+## Fixed user installation and migration (0.2.5+)
+
+- Package: `~/.local/share/figma-handoff-kit/node_modules/figma-handoff-kit/`
+- CLI launchers: `~/.local/bin/figma-handoff`, `~/.local/bin/figma-export`
+- Manifest: the package path above plus `figma-exporter-plugin/manifest.json`
+- Update: stop the bridge, close the plugin, run `figma-handoff setup`, then restart.
+
+Setup uses a per-command npm prefix; it does not change npm configuration, nvm,
+shell profiles or system directories, and does not require sudo. Its launchers
+use `node` from PATH, so active Node must be >=20. Setup does not install Node.
+It downloads a published release; a local development version newer than npm
+latest is not downgraded. Existing unrelated launchers are never overwritten.
+
+For an existing global install: run `figma-handoff setup` from 0.2.5+, add the PATH
+line after nvm initialization, open a new terminal and check `which figma-handoff`.
+It should point to `~/.local/bin/figma-handoff`. Re-import the fixed manifest once
+in Figma Desktop. After verifying the new CLI, optionally remove the old global
+copy with `npm uninstall -g figma-handoff-kit` under each nvm version that has it.
+Project registry and exports are separate and are not removed during migration.
+Do not delete the fixed installation while its manifest is imported in Figma.
+
+The setup command requires 0.2.5 or newer. Older npm-global installations can
+bootstrap with the npx command above after 0.2.5 becomes available on npm.
+
+## Registered projects
+
+```sh
+figma-handoff projects
+figma-handoff projects remove
+figma-handoff projects remove /path/to/project
+```
+
+The list shows each project root and export directory. Remove opens a picker
+(or uses the supplied root) and asks for confirmation in an interactive terminal.
+It only removes the registration: export files and the project folder remain.
+A project whose directory has disappeared can still be removed from the list.
+
+Stop the selected project's bridge before removal. The CLI checks the active
+port (`FIGMA_EXPORT_PORT`, default 3055) again after confirmation; bridges on
+other ports must also be stopped manually. Removing a project does not kill
+processes. Other registrations remain available.
+
+Removed registrations are retained internally to suppress automatic legacy-config
+imports and preserve identity if you explicitly add the same project again.
+Legacy `figma-export.config.json` stays on disk, but `start`/`open` cannot silently
+re-register it. To restore the registration, run `figma-handoff init` in that
+project, or explicitly add it in the project picker. This avoids breaking existing
+export manifests by assigning a new project ID during re-registration.

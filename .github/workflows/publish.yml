@@ -37,8 +37,8 @@ jobs:
         if: steps.version.outputs.publish == 'true'
         run: |
           version=$(node -p 'JSON.parse(require("fs").readFileSync("package.json")).version')
-          for attempt in 1 2 3 4 5 6; do
-            if npm view "figma-handoff-kit@$version" version | grep -Fx "$version"; then
+          for attempt in $(seq 1 36); do
+            if npm view "figma-handoff-kit@$version" version --prefer-online | grep -Fx "$version"; then
               exit 0
             fi
             sleep 10

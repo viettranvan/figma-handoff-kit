@@ -24,7 +24,7 @@ test('global init stores paths outside repo, preserves identity and rejects trav
 test('help is detailed and subcommand help has no filesystem or server side effects', () => {
  const dir = mkdtempSync(join(tmpdir(), 'figma-help-'));
  try {
-  for (const args of [['--help'], ['-h'], ['init', '--help'], ['serve', '--help'], ['start', '--help']]) {
+  for (const args of [['--help'], ['-h'], ['init', '--help'], ['serve', '--help'], ['start', '--help'], ['setup', '--help'], ['projects', '--help'], ['projects', 'remove', '--help']]) {
    const result = spawnSync(process.execPath, [cli, ...args], { cwd: dir, encoding: 'utf8', timeout: 3000 });
    assert.equal(result.status, 0, result.stderr);
    assert.match(result.stdout, /USAGE/);

@@ -2,11 +2,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname, relative } from 'node:path';
 import { ensurePortAvailable } from './port.js';
-import { addProject, chooseProject, registerProject } from './projects.js';
+import { addProject, chooseProject, registerProject, showProjects } from './projects.js';
 import { createBridge } from './bridge.js';
 import { configureFigma, openFigma } from './open-figma.js';
 import { help } from './help.js';
 import { showPlugin } from './plugin.js';
+import { setupUser } from './user-install.js';
 
 const configName = 'figma-export.config.json';
 const args = process.argv.slice(2);
@@ -27,15 +28,19 @@ function findConfig() {
 }
 try {
   const command = args[0];
-  const commands = ['start', 'serve', 'plugin', 'sync', 'init', 'open'];
+  const commands = ['start', 'serve', 'plugin', 'sync', 'init', 'open', 'setup', 'projects'];
   if (command === '--version') {
     if (args.length !== 1) throw new Error('Usage: figma-handoff --version');
     console.log(JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version);
   } else if (command === 'help') {
-    if (args.length > 2 || (args[1] && !commands.includes(args[1]))) throw new Error('Usage: figma-handoff help [start|serve|plugin|sync|init|open]');
+    if (args.length > 2 || (args[1] && !commands.includes(args[1]))) throw new Error('Usage: figma-handoff help [start|serve|plugin|sync|init|open|setup|projects]');
     console.log(help(args[1]));
   } else if (!command || args.includes('--help') || args.includes('-h')) {
     console.log(help(command));
+  } else if (command === 'projects') {
+    await showProjects(args.slice(1));
+  } else if (command === 'setup') {
+    setupUser(args.slice(1));
   } else if (command === 'plugin') {
     await showPlugin(args.slice(1));
   } else if (command === 'init') {
@@ -75,7 +80,7 @@ try {
     let project;
     if (configPath && !args.includes('--select')) {
       const config = JSON.parse(readFileSync(configPath, 'utf8'));
-      project = registerProject({ root: dirname(configPath), projectId: config.projectId, outputDir: config.outputDir });
+      project = registerProject({ root: dirname(configPath), projectId: config.projectId, outputDir: config.outputDir }, { automatic: true });
     } else {
       project = await chooseProject(args.includes('--select'));
     }
