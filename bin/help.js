@@ -23,12 +23,12 @@ NOTES
   --output-dir does not override that legacy file.
 `;
   const serve = `USAGE
-  figma-handoff serve [--select]
+  figma-handoff start [--select]
 
 Start the local bridge at http://localhost:3055.
 
 OPTIONS
-  --select            Always open the project picker, even inside a project.
+  --select            Choose another project, even inside a registered project.
   -h, --help          Show this help without starting a server.
 
 PROJECT SELECTION
@@ -44,8 +44,8 @@ PORT CONFLICTS
   Stopping requires confirmation. No automatic force kill.
 
 EXAMPLES
-  figma-handoff serve
-  figma-handoff serve --select
+  figma-handoff start
+  figma-handoff start --select
 
 WHILE RUNNING
   Open the Figma Handoff Kit plugin on this same computer.
@@ -72,9 +72,11 @@ EXAMPLES
   const sync = `USAGE
   figma-handoff sync [--select]
 
-Run serve on this computer, open the plugin, choose Save to project and
+Run figma-handoff start on this computer, open the plugin, choose Save to project and
 check Allow CLI sync. This pairs the current Figma document to the bridge.
 Sync exports all pages (excluding Trash), 2x, skipping unchanged screens.
+Runs once, from Figma to local files. Does not watch, upload changes or delete
+obsolete export folders.
 Keep Figma, plugin and bridge running. Permission expires on plugin/bridge
 restart. Ctrl+C stops waiting, not an export already running in Figma.
 Timeout: 15 minutes. Results: checked, saved, skipped. No REST API is used.
@@ -96,45 +98,35 @@ Import manually once; npm cannot register the plugin automatically.
   const overview = `USAGE
   figma-handoff <command> [options]
 
-ALIASES
-  figma-export        Compatibility alias for figma-handoff.
-
 COMMANDS
-  plugin              Locate plugin files and show Figma import instructions.
-  init                Register the current folder as a project.
-  serve               Start the local bridge; choose a project when needed.
-  sync                Sync all pages (2×) through an explicitly paired plugin.
-  open                Open saved Figma file and prepare plugin launch (macOS).
+  start               Start the local bridge; select or add a project.
+  plugin              Show the plugin manifest and import instructions.
+  sync                Export once from Figma to local files (requires opt-in).
+  help [command]      Show general or command-specific help.
 
 OPTIONS
+  --version           Print the installed package version.
   -h, --help          Show help. Supported after every command.
 
 QUICK START
   figma-handoff plugin --open
-  cd /path/to/repository
-  figma-handoff init --output-dir docs/figma
-  figma-handoff serve
+  figma-handoff start
 
-  From any other directory:
-  figma-handoff serve --select
+  Import the plugin into Figma Desktop once. Keep the terminal open while
+  exporting. Press Ctrl+C to stop. To switch projects: start --select.
 
-STORAGE
-  Registry: ~/.config/figma-export/projects.json
-  Designs:  the selected project's output directory (default: figma/exports).
-  No new configuration file is created in your repository.
-  Keep export-manifest.json and per-screen checkpoints for stable paths
-  and incremental export. Unchanged screens are skipped unless the plugin's
-  Re-export all switch is enabled.
+ADVANCED
+  init                Register the current folder; supports --output-dir.
+  open                Start bridge and open Figma (experimental, macOS only).
 
-FIGMA PLUGIN
-  The CLI and Figma plugin are installed separately.
-  For development, import figma-exporter-plugin/manifest.json in Figma Desktop.
-  Installing this CLI does not install the Figma plugin automatically.
+COMPATIBILITY
+  serve               Alias for start.
+  figma-export        Alias for figma-handoff.
 
 MORE HELP
-  figma-handoff init --help
-  figma-handoff serve --help
+  figma-handoff help start
+  figma-handoff plugin --help
   figma-handoff sync --help
 `;
-  return intro + '\n' + (command === 'init' ? init : command === 'serve' ? serve : command === 'open' ? open : command === 'sync' ? sync : command === 'plugin' ? plugin : overview);
+  return intro + '\n' + (command === 'init' ? init : (command === 'start' || command === 'serve') ? serve : command === 'open' ? open : command === 'sync' ? sync : command === 'plugin' ? plugin : overview);
 }

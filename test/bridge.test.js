@@ -33,3 +33,30 @@ test('Node bridge preserves identity, checks hashes, writes binary/notes/catalog
   assert.equal((await post('/save', { ...payload, files: [{ name: '../escape', content: 'bad' }] })).status, 400);
  } finally { await new Promise(resolve => server.close(resolve)); rmSync(output, { recursive: true }); }
 });
+
+test('same Figma document can export independently to A and B; copied manifests are rejected', async () => {
+ const { copyFileSync } = await import('node:fs');
+ const dir = mkdtempSync(join(tmpdir(), 'figma-two-destinations-'));
+ const a = join(dir, 'A'), b = join(dir, 'B');
+ const servers = [createBridge({ output:a, projectId:'A', root:dir }), createBridge({ output:b, projectId:'B', root:dir })];
+ try {
+  for (const server of servers) await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const payload = { document:{id:'same-figma-file',name:'Design'},node_path:[{id:'1:2',name:'Screen'}],snapshot:'same-design' };
+  const post = async (index, project, route='/check') => {
+   const r = await fetch(`http://127.0.0.1:${servers[index].address().port}${route}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,project_id:project,files:[{name:'spec.json',content:'{}'}]})});
+   return { status:r.status,...await r.json() };
+  };
+  assert.equal((await post(0,'A','/save')).status,200);
+  const original = readFileSync(join(a,'export-manifest.json'),'utf8');
+  assert.equal((await post(1,'A')).status,400);
+  assert.equal((await post(1,'B','/save')).status,200);
+  assert.equal(JSON.parse(readFileSync(join(b,'export-manifest.json'))).projectId,'B');
+  copyFileSync(join(a,'export-manifest.json'),join(b,'export-manifest.json'));
+  const conflict = await post(1,'B');
+  assert.match(conflict.error,/Output belongs to another project/);
+  assert.equal(readFileSync(join(a,'export-manifest.json'),'utf8'),original);
+ } finally {
+  for (const server of servers) await new Promise(resolve=>server.close(resolve));
+  rmSync(dir,{recursive:true,force:true});
+ }
+});

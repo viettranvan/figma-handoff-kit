@@ -1,6 +1,6 @@
-# Release 0.2.2
+# Release 0.2.4
 
-This document prepares the release; it does not mean npm 0.2.2 or a Figma Community listing has been published.
+This document describes release validation and npm CI publishing. A version change in source is not proof that the registry release succeeded.
 
 ## Validate the release
 
@@ -26,25 +26,42 @@ Manual Figma Desktop checks using a disposable design copy:
 
 Shared library/style changes, large-file memory use and Figma browser local-network/download behavior need real-environment checks. Automated tests do not replace these checks.
 
-## Publish npm
+## Publish npm through GitHub Actions
 
-Use the existing npm account and its browser/passkey authentication:
+Configure the npm trusted publisher for `viettranvan/figma-handoff-kit`, workflow
+`publish.yml`, environment `npm`, with direct `npm publish` allowed. The GitHub
+Environment must allow only `main`; no reviewer gate is needed for automatic
+publishing. No npm token or GitHub PAT is required.
 
-```sh
-npm whoami
-npm publish --access public
-npm view @viettran210/figma-handoff-kit version
-```
+1. Update both package versions with `npm version patch --no-git-tag-version`
+   (or choose a minor/major version intentionally), then update CHANGELOG.md.
+2. Open a PR. CI runs tests, checks package contents and installs the archive in
+   a temporary directory to verify both CLI names and plugin discovery.
+3. Require the `Package checks` status in the main branch ruleset before merging.
+4. Merge the reviewed PR. `publish.yml` checks the merged commit again and
+   publishes the tested archive with OIDC. Manual dispatch is restricted to main.
+5. Check the Publish npm run and verify the registry version. Registry visibility
+   can lag; verification retries for about a minute.
 
-Then test a registry installation:
+Existing versions are skipped, allowing documentation-only merges and safe
+re-runs. Registry errors fail the job. New versions must be stable x.y.z and
+newer than all published stable versions. Do not reuse a published version.
+Keep release merges sequential: GitHub concurrency retains only one pending
+run, so rapid merges can replace a pending run. The running publish is not cancelled.
 
-```sh
-npm install -g @viettran210/figma-handoff-kit@0.2.2
-figma-handoff --help
-figma-handoff sync --help
-```
+The package is now `figma-handoff-kit`. Bootstrap its first release manually
+before configuring trusted publishing for this new package. The old scoped
+package's trusted publisher does not apply to the new name. Keep the same GitHub
+environment `npm`, repository and workflow filename.
 
-Keep package.json/package-lock.json versions together. Do not reuse a published version. Commit the reviewed source and tag the release in Git when ready.
+Existing users: stop the bridge, uninstall `@viettran210/figma-handoff-kit`, install
+`figma-handoff-kit`, then run `figma-handoff plugin --open` and import the new
+manifest path in Figma Desktop. Project registration and exported files remain
+outside the package installation and are preserved. Do not install both packages
+at once because they provide the same CLI executable names.
+
+This pipeline publishes npm only. Figma Desktop checks above remain manual;
+it does not publish the Figma Community listing or create GitHub release tags.
 
 ## Prepare Figma Community
 
@@ -60,7 +77,7 @@ Figma Handoff Kit exports design bundles for development and AI-assisted impleme
 
 **Download ZIP:** choose your selection, current page or all pages. No CLI needed. Extract the archive into your project.
 
-**Save to project:** install Node.js 20+, run `npm install -g @viettran210/figma-handoff-kit`, then `figma-handoff serve` on the same computer as Figma. Choose your project and output folder in the terminal; confirm them in the plugin. Exports are saved locally, with unchanged screens skipped.
+**Save to project:** install Node.js 20+, run `npm install -g figma-handoff-kit`, then `figma-handoff start` on the same computer as Figma. Choose your project and output folder in the terminal; confirm them in the plugin. Exports are saved locally, with unchanged screens skipped.
 
 **Sync from terminal:** choose Save to project and enable Allow CLI sync in the plugin. Keep Figma, plugin and bridge open, then run `figma-handoff sync` whenever you want an update. It checks all pages except Trash at 2× and exports new/changed screens. Disable the checkbox to revoke access. Sync does not open Figma or delete obsolete local folders.
 

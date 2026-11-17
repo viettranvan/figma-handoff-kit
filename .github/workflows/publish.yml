@@ -1,0 +1,47 @@
+name: Publish npm
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run check:release
+      - id: version
+        run: node scripts/release-version.mjs
+      - id: pack
+        if: steps.version.outputs.publish == 'true'
+        run: node scripts/pack-smoke.mjs
+      - name: Publish tested archive with OIDC
+        if: steps.version.outputs.publish == 'true'
+        run: npm publish "${{ steps.pack.outputs.archive }}" --access public
+      - name: Verify registry version
+        if: steps.version.outputs.publish == 'true'
+        run: |
+          version=$(node -p 'JSON.parse(require("fs").readFileSync("package.json")).version')
+          for attempt in 1 2 3 4 5 6; do
+            if npm view "figma-handoff-kit@$version" version | grep -Fx "$version"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Publish returned success, but registry verification timed out. Check npm before retrying."
+          exit 1

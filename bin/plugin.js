@@ -11,7 +11,7 @@ export async function showPlugin(args) {
   if (args.includes('--path') && args.includes('--open')) throw new Error('Choose --path or --open, not both.');
   for (const name of ['manifest.json', 'code.js', 'ui.html']) {
     if (!existsSync(fileURLToPath(new URL('../figma-exporter-plugin/' + name, import.meta.url)))) {
-      throw new Error(`Plugin file missing: ${name}. Reinstall @viettran210/figma-handoff-kit.`);
+      throw new Error(`Plugin file missing: ${name}. Reinstall figma-handoff-kit.`);
     }
   }
   if (args.includes('--path')) { console.log(pluginManifest); return; }
@@ -25,7 +25,7 @@ Manifest: ${pluginManifest}
    macOS file picker: press Cmd+Shift+G and paste the full manifest path.
    Windows file picker: paste the full manifest path into File name.
 4. Plugins → Development → Figma Handoff Kit.
-5. Download ZIP, or run figma-handoff serve and choose Save to project.
+5. Download ZIP, or run figma-handoff start and choose Save to project.
 
 Import once per computer. npm installation does not register plugins in Figma.
 After updating npm: restart the bridge and reopen the plugin. If you change

@@ -35,7 +35,7 @@ export async function ensurePortAvailable(port) {
     console.error(`Port ${port} is already in use.`);
   }
   if (!process.stdin.isTTY || !owners.length) {
-    throw new Error(owners.length ? 'Run serve in an interactive terminal to choose Stop or Exit.' : 'Cannot identify the listener; no process was stopped.');
+    throw new Error(owners.length ? 'Run figma-handoff start in an interactive terminal to choose Stop or Exit.' : 'Cannot identify the listener; no process was stopped.');
   }
   const action = await select({
     message: 'How would you like to continue?',
@@ -52,7 +52,7 @@ export async function ensurePortAvailable(port) {
   });
   if (isCancel(approved) || !approved) throw new Error('Cancelled; existing service was left running.');
     const current = listeners(port);
-    if (JSON.stringify(current) !== JSON.stringify(owners)) throw new Error('Listener changed; run serve again. No process was stopped.');
+    if (JSON.stringify(current) !== JSON.stringify(owners)) throw new Error('Listener changed; run figma-handoff start again. No process was stopped.');
     for (const owner of owners) {
       if (owner.pid === process.pid || owner.pid <= 1) throw new Error('Refusing to stop this process.');
       process.kill(owner.pid, 'SIGTERM');
