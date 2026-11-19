@@ -8,7 +8,7 @@ test('selected ZIP starts without crypto.randomUUID in a sandboxed iframe', () =
  const messages = [];
  const context = { btnExport:{disabled:false}, isExporting:false, activeRunId:null, delivery:'zip', exportDelivery:null, zipFiles:new Map(),zipURL:null,
  document:{getElementById:()=>({hidden:false,checked:false}),querySelector:()=>({value:'2'})},stats:{}, phase:'ready',
- renderProgress(){},setControlsDisabled(){},getSelectedScope:()=> 'selection',addLog(){}, projectId:null,exportProjectId:null,
+ renderProgress(){},renderSummary(){},screenCountLabel(){return "";},showExportError(){},setControlsDisabled(){},getSelectedScope:()=> 'selection',addLog(){}, projectId:null,exportProjectId:null,
  parent:{postMessage:msg=>messages.push(msg)},Date,Math };
  vm.createContext(context);vm.runInContext(source,context);
  context.btnExport.onclick({isTrusted:true});
@@ -26,7 +26,7 @@ test('switching bridges refreshes destination and requires confirmation before e
  const messages = [], logs = [];
  const context = { btnExport:{disabled:false}, isExporting:false, activeRunId:null, delivery:'local', exportDelivery:null, zipFiles:new Map(),zipURL:null,
  document:{getElementById:()=>({hidden:false,checked:false}),querySelector:()=>({value:'2'})},stats:{}, phase:'ready',
- renderProgress(){},setControlsDisabled(){},getSelectedScope:()=> 'selection',addLog: text => logs.push(text), words:(vi,en)=>en,
+ renderProgress(){},renderSummary(){},screenCountLabel(){return "";},showExportError(){},setControlsDisabled(){},getSelectedScope:()=> 'selection',addLog: text => logs.push(text), words:(vi,en)=>en,
  projectId:'A',exportProjectId:null,isServerOnline:true,
  parent:{postMessage:msg=>messages.push(msg)},Date,Math };
  vm.createContext(context);

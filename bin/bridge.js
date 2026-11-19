@@ -55,6 +55,7 @@ export function createBridge({ output, projectId, root }) {
     } catch { return false; }
   }
   function guides(dest, files) {
+    if (files.some(file => file.name === 'mobile_handoff.json' && JSON.parse(file.content).platform !== 'all')) return;
     const components = files.find(f => f.name === 'components_used.json');
     if (components) {
       const path = safe(output, 'DESIGN_SYSTEM_CATALOG.json');
@@ -94,8 +95,8 @@ export function createBridge({ output, projectId, root }) {
     res.setHeader('Content-Type', 'application/json');
     const send = (status, value) => { res.writeHead(status); res.end(JSON.stringify(value)); };
     if (req.method === 'OPTIONS') return send(204, {});
-    if (req.method === 'GET' && ['/', '/health'].includes(req.url)) return send(200, { status: 'ok', exports_dir: output, project_id: projectId, project_name: basename(root), project_root: root, runtime: 'node', protocol_version: 1 });
-    if (req.method === 'GET' && req.url === '/sync/status') return send(200, { job, connected: !!session && Date.now() - session.seen < 10000 });
+    if (req.method === 'GET' && ['/', '/health'].includes(req.url)) return send(200, { status: 'ok', exports_dir: output, project_id: projectId, project_name: basename(root), project_root: root, runtime: 'node', protocol_version: 1, capabilities: ['target-export-v1', 'platform-export-v1'] });
+    if (req.method === 'GET' && req.url === '/sync/status') return send(200, { job, connected: !!session && Date.now() - session.seen < 10000, fileKey: session?.fileKey || null, documentId: session?.documentId || null, engineRevision: session?.engineRevision || null });
     if (req.method !== 'POST'  || !['/check', '/save', '/save-notes', '/sync/pair', '/sync/poll', '/sync/start', '/sync/result', '/sync/unpair'].includes(req.url)) return send(404, { error: 'Not found' });
     try {
       const chunks = []; let size = 0;
@@ -107,13 +108,27 @@ export function createBridge({ output, projectId, root }) {
           if (req.headers.origin) throw new Error('Sync must be requested by the local CLI');
           if (!session || Date.now() - session.seen > 10000) throw new Error('Open the plugin, choose Save to project and enable CLI sync first.');
           if (job && ['queued','running'].includes(job.state)) throw new Error('A sync is already running');
-          job = { id: randomUUID(), state:'queued', documentId:session.documentId, createdAt:Date.now() };
+          const platform = payload.platform ?? 'web';
+          if (!['web', 'android', 'ios', 'mobile', 'all'].includes(platform)) throw new Error('Invalid export platform');
+          if (platform !== 'web' && !session.platformExport) throw new Error('Reopen the updated plugin to use platform export.');
+          if (payload.target) {
+            if (session.fileKey && payload.target.fileKey !== session.fileKey) throw new Error('Requested Figma file is not paired. Reopen the updated plugin in that file and enable CLI sync/export.');
+            if (!session.fileKey && !payload.allowPairedFile) throw new Error('Figma does not expose this file key. Verify the paired file, then use --paired-file explicitly.');
+            if (!/^\d+:\d+$/.test(payload.target.nodeId) || ![1,2,3].includes(payload.scale || 2)) throw new Error('Invalid target node or scale');
+            if (!session.targetExport) throw new Error('Plugin needs target-export-v1; reopen the updated local plugin.');
+          }
+          job = { id: randomUUID(), state:'queued', ...(platform !== 'web' ? {platform} : {}), documentId:session.documentId, createdAt:Date.now(), ...(payload.target ? {target:payload.target,scale:payload.scale || 2,force:!!payload.force,allowPairedFile:!session.fileKey && !!payload.allowPairedFile} : {}) };
           return send(200, job);
         }
         if (req.url === '/sync/pair') {
           if (!payload.documentId) throw new Error('Document ID required');
-          if (session && Date.now()-session.seen < 10000) throw new Error('Another Figma document is paired; disable it first.');
-          session = { documentId:payload.documentId, token:randomUUID(), seen:Date.now() };
+          if (session && Date.now()-session.seen < 10000) {
+            throw new Error(session.documentId === payload.documentId
+              ? 'A previous CLI session for this document is still active.'
+              : 'Another Figma document is paired; disable it first.');
+          }
+          if (job && ['queued','running'].includes(job.state)) { job.state='error'; job.error='Plugin session was replaced; retry export.'; }
+          session = { documentId:payload.documentId, token:randomUUID(), seen:Date.now(), fileKey:payload.fileKey, engineRevision:payload.engineRevision, targetExport:payload.targetExport === true, platformExport:payload.platformExport === true };
           return send(200, { token:session.token });
         }
         if (!session || session.token !== payload.token || session.documentId !== payload.documentId) throw new Error('Pairing expired; enable CLI sync again.');
@@ -131,7 +146,7 @@ export function createBridge({ output, projectId, root }) {
         }
         if (req.url === '/sync/result') {
           if (!job || job.id !== payload.jobId) throw new Error('Unknown sync');
-          job.state = payload.error ? 'error' : 'done'; job.error = payload.error; job.stats = payload.stats;
+          job.state = payload.error ? 'error' : 'done'; job.error = payload.error; job.stats = payload.stats; job.profile = payload.profile;
           return send(200,{success:true});
         }
       }

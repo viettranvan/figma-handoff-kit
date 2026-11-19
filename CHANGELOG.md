@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.2.6
+
+- Add Android, iOS, mobile and combined web/native handoff profiles. Native-only exports skip Figma CSS lookups and write to separate profile folders.
+- Keep export controls and feedback visible in a fixed footer, show scope counts before export, and surface CLI readiness and recovery separately from bridge health.
+
+- Diagnose SVG cache eligibility, accept exact float32 full-circle angles, and reuse safe circle renders with bounded per-export caches.
+- Cache original image bytes/size by image hash without sharing consumer crop/transform metadata.
+
+- Cache shared component definitions/descriptions for each export while retaining instance overrides; profile component work, metadata reads and cache hits.
+
+- Cache successful variable resolution per consumer node and prefer the Figma base64 API.
+- Add per-screen phase timings and token cache counters, saved with export --profile.
+
+- Prefetch up to four node CSS reads while preserving ordered extraction/rendering; cache repeated style reads per screen without sharing consumer variable resolutions.
+- Add bounded target-loading retries and strict background export: automatic Desktop/plugin launch now requires explicit --foreground.
+
+- Add local CLI export by Figma URL with file identity validation, explicit node targeting, scale and force options.
+
+- Prefer Save to project when the plugin discovers a compatible local bridge, respecting explicit destination choices.
+- Use one Allow CLI sync/export checkbox; remember explicit permission per file/project on the device and reconnect automatically.
+- Prepare bridge and request Figma Desktop/plugin launch from URL export; wait for actual pairing before dispatch.
+- Remember explicitly confirmed URL/document mappings when Figma does not expose fileKey.
+- Retry completion delivery, tolerate delayed active-job heartbeats, and correct CLI-force skipped counts.
+
 ## 0.2.5
 
 - Add project listing and confirmed unregistration, preserving exports and preventing silent re-registration from legacy configuration.

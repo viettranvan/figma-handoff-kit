@@ -22,21 +22,36 @@ export async function configureFigma(project, supplied) {
   const figmaUrl = figmaLink(value);
   return registerProject({ ...project, figmaUrl });
 }
-export async function openFigma(project) {
+export async function openFigma(project, { run = execute, foreground = false } = {}) {
+  if (!foreground) {
+    console.log('Background mode does not open Figma. Use an already-connected plugin, or explicitly pass --foreground.');
+    return;
+  }
+  if (process.platform !== 'darwin') {
+    console.log('Automatic plugin launch currently supports macOS. Open the target file and run Figma Handoff Kit; waiting for handshake.');
+    return;
+  }
   // Pass URL as an argument, never interpolate it into AppleScript or a shell.
   const deepLink = desktopLink(project.figmaUrl);
-  await execute('/usr/bin/open', ['-a', 'Figma', deepLink]);
+  await run('/usr/bin/open', [...(foreground ? [] : ['-g']), '-a', 'Figma', deepLink]);
   try {
-    const result = await execute('/usr/bin/osascript', ['-e', `
-      tell application "Figma" to activate
+    const result = await run('/usr/bin/osascript', ['-e', `
+      ${foreground ? 'tell application "Figma" to activate' : ''}
       tell application "System Events"
         repeat 40 times
           if exists process "Figma" then exit repeat
           delay 0.25
         end repeat
         tell process "Figma"
-          set frontmost to true
+          ${foreground ? 'set frontmost to true' : ''}
           delay 3
+          -- Development plugins have a native menu entry, avoiding canvas AX inspection.
+          try
+            click menu item "Figma Handoff Kit" of menu 1 of menu item "Development" of menu 1 of menu bar item "Plugins" of menu bar 1
+            return "launched"
+          end try
+          ${foreground ? '' : 'return "background-unavailable"'}
+          key code 53
           keystroke "/" using {command down}
           delay 1
           keystroke "Figma Handoff Kit"
@@ -55,7 +70,11 @@ export async function openFigma(project) {
         end tell
       end tell
     `], { timeout: 20000 });
-    if (result.stdout.trim() === 'launched') { console.log('Plugin launch requested. Choose options in the Figma popup; export requires your click.'); return; }
+    if (result.stdout.trim() === 'launched') { console.log('Plugin launch requested. Waiting for plugin handshake.'); return; }
+    if (result.stdout.trim() === 'background-unavailable') {
+      console.log('Background plugin launch unavailable. Run the plugin manually or retry with --foreground.');
+      return;
+    }
     console.log('Figma Quick Actions is open with “Figma Handoff Kit”. Confirm the matching plugin with Enter. No export has started.');
   } catch (error) {
     console.error(`Plugin launch failed: ${(error.stderr || error.message).trim()}`);

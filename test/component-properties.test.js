@@ -20,3 +20,15 @@ test('unreadable official properties produce warnings without replacing them wit
  const result=inspectComponentInstance({id:'i',mainComponent:{id:'m',name:'Button'},get componentProperties(){throw new Error('Unavailable');},children:[]});
  assert.equal(result.componentProperties,null);assert.match(result.propertyWarnings[0],/Unavailable/);
 });
+
+test('shared metadata cache preserves per-instance properties, variants and text',()=>{
+ let reads=0;
+ const master={id:'m',name:'Button',description:'Shared',get componentPropertyDefinitions(){reads++;return {Label:{type:'TEXT'}};}};
+ const context={componentMetadataCache:new Map(),profile:{componentMs:0,componentMetadataReads:0,componentCacheHits:0}};
+ const node=(id,text)=>({id,type:'INSTANCE',name:'Button',mainComponent:master,variantProperties:{Size:text},componentProperties:{Label:{value:text}},children:[{id:id+'text',type:'TEXT',name:'Label',characters:text}]});
+ const a=inspectComponentInstance(node('a','A'),context),b=inspectComponentInstance(node('b','B'),context);
+ assert.equal(reads,1);assert.equal(context.profile.componentCacheHits,1);assert.equal(context.profile.componentMetadataReads,1);
+ assert.equal(a.componentProperties.Label.value,'A');assert.equal(b.componentProperties.Label.value,'B');
+ assert.equal(a.inferredTextProps[0].value,'A');assert.equal(b.inferredTextProps[0].value,'B');
+ assert.equal(b.variantProperties.Size,'B');
+});

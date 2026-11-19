@@ -131,10 +131,10 @@ macOS may request Accessibility permission for the hosting terminal and Automati
 ## Sync changes with one command
 
 1. Run `figma-handoff start` in your registered project and leave this terminal open.
-2. Open the updated plugin in the target Figma file, select **Save to project** and enable **Allow CLI sync for this file (all pages, 2×)**.
+2. Open the updated plugin in the target Figma file, select **Save to project** and enable **Allow CLI sync/export**.
 3. From another terminal inside the registered project, run `figma-handoff sync` (or `figma-handoff sync --select`).
 
-Sync sends one explicit request to the paired plugin. It exports all pages except Trash at 2× with incremental skipping, then prints checked/saved/skipped counts. The bridge and plugin must remain running. Pairing is session-only and must be enabled again after restart; disabling the checkbox immediately revokes the pairing. Only one active document may pair with a bridge. A second sync is rejected while one is queued/running. Failed/disconnected syncs are reported; no export is triggered by merely opening the plugin. Ctrl+C only stops the CLI waiting, not a running Figma export. Runtime timeout is 15 minutes. Automated protocol tests cover pairing, dispatch and completion; verify the real Figma workflow before publishing.
+Sync sends one explicit request to the paired plugin. It exports all pages except Trash at 2× with incremental skipping, then prints checked/saved/skipped counts. The bridge and plugin must remain running. Permission is remembered locally for each file/project after the first explicit opt-in; disabling the checkbox revokes both the current pairing and remembered permission. Only one active document may pair with a bridge. A second sync is rejected while one is queued/running. Failed/disconnected syncs are reported; no export is triggered by merely opening the plugin. Ctrl+C only stops the CLI waiting, not a running Figma export. Runtime timeout is 15 minutes. Automated protocol tests cover pairing, dispatch and completion; verify the real Figma workflow before publishing.
 
 
 ```sh
@@ -142,7 +142,7 @@ Sync sends one explicit request to the paired plugin. It exports all pages excep
 cd /path/to/project
 figma-handoff start
 
-# Enable Allow CLI sync in the plugin, then use terminal 2 whenever needed
+# Enable Allow CLI sync/export in the plugin, then use terminal 2 whenever needed
 cd /path/to/project
 figma-handoff sync
 ```
@@ -155,7 +155,7 @@ Sync updates new/changed screens and recreates missing or modified outputs. It d
 
 - **Can view on the original file:** this Design plugin needs permission to run in the file. Ask for edit access, have the designer export, or duplicate into your Drafts if the owner permits copying. A copy does not receive later changes from the original automatically.
 - **Cannot reach bridge:** run `figma-handoff start` on the same computer, check port 3055 and local-network permissions, then Retry in the plugin.
-- **Enable CLI sync first:** choose Save to project, verify the destination and enable Allow CLI sync. Repeat after restarting the bridge or plugin.
+- **Enable CLI sync first:** choose Save to project, verify the destination and enable Allow CLI sync/export. Enable once per file/project; the updated plugin remembers permission locally and reconnects after restart.
 - **Different project:** stop the old bridge, run `figma-handoff start --select` and select the intended project. Reconnect the plugin before enabling sync.
 - **Already paired/running:** only one plugin session and one sync job are supported per bridge. Disable pairing in the other plugin, or restart the bridge if that session is unavailable.
 - **Plugin disconnected / timeout:** inspect Figma and its export log before retrying. Ctrl+C does not cancel the Figma export. Restart the bridge if an abandoned job blocks future requests.
@@ -366,3 +366,87 @@ Legacy `figma-export.config.json` stays on disk, but `start`/`open` cannot silen
 re-register it. To restore the registration, run `figma-handoff init` in that
 project, or explicitly add it in the project picker. This avoids breaking existing
 export manifests by assigning a new project ID during re-registration.
+
+When the plugin opens, it checks the local bridge. A compatible connected bridge
+automatically selects Save to project; otherwise ZIP remains selected. Installing
+the package alone cannot be detected by the plugin: run `figma-handoff start`.
+An explicit destination choice is respected, including when the bridge reconnects.
+The single Allow CLI sync/export checkbox remains off until enabled explicitly.
+This permission is remembered per file/project on this device after the first explicit opt-in; uncheck to revoke it.
+
+## Export a section from a Figma URL (local development)
+
+Import the updated local plugin once and enable **Allow CLI sync/export** in the
+correct file/project once. The plugin remembers permission on this device. Then:
+
+```sh
+figma-handoff export "https://www.figma.com/design/FILE/Design?node-id=1-2" --force --scale 2
+```
+
+### Export for Android and iOS
+
+Choose **Export platform** in the plugin or pass `--platform` to `export` or `sync`.
+
+```sh
+figma-handoff export "https://www.figma.com/design/FILE/Design?node-id=1-2" --platform android
+figma-handoff export "https://www.figma.com/design/FILE/Design?node-id=1-2" --platform ios
+figma-handoff sync --platform mobile
+```
+
+- `web` is the default and uses the existing output location and format.
+- `android`, `ios`, and `mobile` (both) skip Figma native CSS lookups and export screenshots, SVG/raster assets, layout, text runs, component metadata and design tokens without HTML snippets or node CSS.
+- `all` includes web output and mobile handoff metadata in one bundle.
+
+Each non-web profile uses its own document folder and change checkpoint. In
+`mobile_handoff.json`, target units describe the expected implementation units.
+Bounds and typography retain Figma design values. Screenshot scale controls
+pixel density only. Assets are SVG or raster source files for native import or
+conversion. Project exports from the CLI require an updated bridge and plugin.
+
+
+The CLI reuses a compatible bridge for the current project or starts one for the
+command. If no matching plugin is connected, it waits for the authorized plugin to reconnect.
+Only `--foreground` opens the file in Figma Desktop and requests the plugin
+through the native Development menu (Quick Actions fallback) on macOS. Grant Accessibility to
+the terminal/app hosting the CLI and Automation access to System Events for this
+step. Opening a URL alone does not launch a development plugin. If launch cannot
+be automated, run Figma Handoff Kit manually; the CLI waits up to 90 seconds for
+an actual handshake. Other platforms can use an already-connected plugin.
+
+The plugin automatically selects Save to project unless you explicitly chose ZIP.
+It restores permission only for a remembered file/project, then reconnects without
+another checkbox click. Scope, scale and force come from the command, with no UI
+option selection required. A CLI-created bridge stops when the command ends;
+a bridge already running remains open. Keep Figma/plugin open during export.
+
+Figma may not expose `fileKey` to development plugins. On the first URL export,
+verify the open paired file and add `--paired-file`. This records your confirmed
+URL-to-local-document mapping in the local project registry; subsequent exports
+of that same URL/file can omit the flag. A different URL or document needs a fresh
+confirmation. This mapping is user-confirmed, not a Figma-verified file key. Known
+mismatched file keys are always rejected. Unchecking CLI permission still blocks
+export even when a URL mapping exists.
+
+Only one job runs at a time. A delayed heartbeat during an active job does not
+immediately abort the CLI; overall job timeout remains 15 minutes. Completion
+messages retry after transient connection failures. Ctrl+C stops waiting and any
+bridge owned by that command; an export already running inside Figma may continue.
+The existing sync command continues to export all pages. These changes require
+the updated CLI and local plugin and have not been published to npm.
+
+URL export uses strict background mode by default: it never opens a Figma file,
+activates Figma, invokes native menus or sends keyboard input. It reuses the
+connected plugin, or waits for a previously authorized plugin to reconnect to the
+bridge. If no plugin is running, open it yourself or explicitly use
+`--foreground` to allow automatic Desktop/plugin launch. `open -g` and native AX
+menu actions are not sufficient to guarantee that Figma preserves focus, so they
+are not used in background mode. Target lookup waits up to 30 seconds for loading.
+
+To save per-screen phase timings, add `--profile /path/to/profile.json` to URL
+export. Timings are elapsed wall-clock milliseconds, not CPU time. Main phases
+(snapshot/check, screenshot render/encode, extraction, serialization and upload
+acknowledgment) are sequential. CSS wait, token extraction, asset render/read and
+asset encode are nested within extraction; do not add them to extraction again.
+CSS wait measures time on the critical path, not summed prefetched API time.
+Upload acknowledgment includes IPC, UI JSON encoding, HTTP and bridge file writes.
+Profiles also record actual consumer-variable resolutions and per-node cache hits.

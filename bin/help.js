@@ -70,10 +70,10 @@ EXAMPLES
   figma-handoff open --select
 `;
   const sync = `USAGE
-  figma-handoff sync [--select]
+  figma-handoff sync [--select] [--platform web|android|ios|mobile|all]
 
 Run figma-handoff start on this computer, open the plugin, choose Save to project and
-check Allow CLI sync. This pairs the current Figma document to the bridge.
+check Allow CLI sync/export. This pairs the current Figma document to the bridge.
 Sync exports all pages (excluding Trash), 2x, skipping unchanged screens.
 Runs once, from Figma to local files. Does not watch, upload changes or delete
 obsolete export folders.
@@ -125,6 +125,26 @@ EXAMPLES
   figma-handoff projects remove
   figma-handoff projects remove /path/to/project
 `;
+  const exportHelp = `USAGE
+  figma-handoff export <Figma-HTTPS-URL-with-node-id> [--scale 1|2|3] [--platform web|android|ios|mobile|all] [--force] [--select] [--paired-file] [--foreground] [--profile file.json]
+
+Export one section/frame. Reuse the project bridge or start one for this command.
+Default background mode never opens files/menus or sends keyboard input.
+It waits for an authorized plugin to reconnect. --foreground explicitly permits
+opening Figma Desktop and launching the plugin using macOS Accessibility.
+Import the plugin and enable CLI sync/export once per file/project on this device.
+The plugin remembers that permission and reconnects on subsequent launches.
+A bridge started by export stops when the command ends; an existing bridge stays open.
+If Figma does not expose fileKey, verify the open file and use --paired-file once.
+The confirmed URL/document mapping is remembered locally for this project; it is
+user-confirmed, not a Figma-verified file key. Changed URLs/documents need confirmation.
+Use --profile file.json to save per-screen phase timings from the updated plugin.
+Default platform: web. mobile includes Android and iOS. all includes web and mobile.
+Default scale: 2. --force renders again even when unchanged. No REST API is used.
+
+EXAMPLES
+  figma-handoff export "https://www.figma.com/design/FILE/Design?node-id=1-2" --force
+`;
   const overview = `USAGE
   figma-handoff <command> [options]
 
@@ -133,6 +153,7 @@ COMMANDS
   projects            List projects or remove a registration.
   setup               Install/update at a fixed user path (macOS/Linux).
   plugin              Show the plugin manifest and import instructions.
+  export <URL>        Export the section/frame identified by a Figma link.
   sync                Export once from Figma to local files (requires opt-in).
   help [command]      Show general or command-specific help.
 
@@ -160,5 +181,5 @@ MORE HELP
   figma-handoff plugin --help
   figma-handoff sync --help
 `;
-  return intro + '\n' + (command === 'projects' ? projects : command === 'setup' ? setup : command === 'init' ? init : (command === 'start' || command === 'serve') ? serve : command === 'open' ? open : command === 'sync' ? sync : command === 'plugin' ? plugin : overview);
+  return intro + '\n' + (command === 'export' ? exportHelp : command === 'projects' ? projects : command === 'setup' ? setup : command === 'init' ? init : (command === 'start' || command === 'serve') ? serve : command === 'open' ? open : command === 'sync' ? sync : command === 'plugin' ? plugin : overview);
 }

@@ -1,4 +1,5 @@
 let activeRunId = null;
+let exportProfile = null;
 function sendUI(message) {
   figma.ui.postMessage({ ...message, runId: activeRunId });
 }
@@ -14,8 +15,10 @@ function exportIdentity(node) {
   for (let item = node; item && item.type !== "DOCUMENT"; item = item.parent) {
     path.unshift({ id: item.id, name: item.name });
   }
+  const platform = exportProfile?.platform || "web";
+  const suffix = platform === "web" ? "" : `:${platform}`;
   return {
-    document: { id: figma.fileKey || localDocumentId, name: figma.root.name },
+    document: { id: (figma.fileKey || localDocumentId) + suffix, name: figma.root.name + (suffix ? ` (${platform})` : "") },
     node_path: path
   };
 }
@@ -65,18 +68,14 @@ function getStatusInfo() {
 
   let selSections = 0;
   let selScreens = 0;
-  for (const node of selection) {
+  function countSelection(node) {
     if (node.type === "SECTION") {
       selSections++;
-      for (const ch of node.children) {
-        if (ch.type === "FRAME" || ch.type === "COMPONENT" || ch.type === "INSTANCE" || ch.type === "COMPONENT_SET") {
-          selScreens++;
-        }
-      }
-    } else if (node.type === "FRAME" || node.type === "COMPONENT" || node.type === "INSTANCE" || node.type === "COMPONENT_SET") {
-      selScreens++;
-    }
+      node.children.forEach(countSelection);
+    } else if (["FRAME", "COMPONENT", "INSTANCE", "COMPONENT_SET"].includes(node.type) &&
+               node.width >= 160 && node.height >= 100) selScreens++;
   }
+  selection.forEach(countSelection);
 
   return {
     currentPageName: currentPage.name,
@@ -116,13 +115,24 @@ function sanitizeFilename(name) {
   return value;
 }
 
-function bufferToBase64(bytes) {
+function bufferToBase64(bytes, profile = null) {
+  const start = Date.now();
+  try {
+  if (typeof figma.base64Encode === 'function') return figma.base64Encode(bytes);
   let binary = "";
   const len = bytes.byteLength;
   for (let i = 0; i < len; i++) {
     binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary);
+  } finally { if (profile) profile.assetEncodeMs += Date.now() - start; }
+}
+
+async function measured(profile, key, task) {
+  if (!profile) return task();
+  const start = Date.now();
+  try { return await task(); }
+  finally { profile[key] += Date.now() - start; }
 }
 
 function decodeUtf8(bytes) {
@@ -485,7 +495,9 @@ function readVariantProperties(node, variantNode = node) {
 }
 
 // Inspect Component Instance & Generate Reusable Directives
-function inspectComponentInstance(node) {
+function inspectComponentInstance(node, context = null) {
+  const started = Date.now();
+  try {
   const mainComp = node.mainComponent;
   if (!mainComp) return null;
 
@@ -500,7 +512,19 @@ function inspectComponentInstance(node) {
     catch (error) { propertyWarnings.push(`${field}: ${error.message}`); return null; }
   }
   const componentProperties = readProperties(node, 'componentProperties');
-  const componentPropertyDefinitions = readProperties(compSet || mainComp, 'componentPropertyDefinitions');
+  const owner = compSet || mainComp;
+  const cache = context?.componentMetadataCache;
+  let shared = cache?.get(owner.id);
+  if (shared) {
+    if (context.profile) context.profile.componentCacheHits++;
+    propertyWarnings.push(...shared.warnings);
+  } else {
+    if (context?.profile) context.profile.componentMetadataReads++;
+    const before = propertyWarnings.length;
+    shared = { definitions:readProperties(owner, 'componentPropertyDefinitions'), description:compSet?.description || mainComp.description || '', warnings:propertyWarnings.slice(before) };
+    if (cache && shared.definitions !== null) cache.set(owner.id, shared);
+  }
+  const componentPropertyDefinitions = shared.definitions;
   const inferredTextProps = [];
   function findOverrides(n) {
     if (n.type === 'TEXT' && n.characters) {
@@ -524,7 +548,7 @@ function inspectComponentInstance(node) {
     ...(variants.warning ? { variantWarning: variants.warning } : {}),
     ...(variants.unassigned ? { unassignedVariantLabels: variants.unassigned } : {}),
     ...(variants.source ? { variantMetadataSource: variants.source, variantRawName: variants.rawName, variantNormalizedName: variants.normalizedName } : {}),
-    description: compSet?.description || mainComp.description || "",
+    description: shared.description,
     componentProperties,
     componentPropertyDefinitions,
     propertySource: 'figma-component-properties',
@@ -533,6 +557,7 @@ function inspectComponentInstance(node) {
     recommendedUsage: codeSnippet,
     reuseDirective: `Find the code component matching Figma ${JSON.stringify(componentSetName)} and map its official Figma properties to the verified code API. Variant metadata source: ${variants.source || 'figma'}.`
   };
+  } finally { if (context?.profile) context.profile.componentMs += Date.now() - started; }
 }
 
 // Generate Google Fonts links (unverified candidates only)
@@ -578,6 +603,7 @@ async function extractTokenReferences(node, nodeItem, context) {
   const catalog = context.designTokens.namedTokens || (context.designTokens.namedTokens = {});
   const references = [];
   const warnings = [];
+  const resolvedValues = new Map();
   const cache = context.tokenVariableCache || (context.tokenVariableCache = new Map());
   const expanded = context.tokenAliasesExpanded || (context.tokenAliasesExpanded = new Set());
   async function variableGraph(id, path = new Set()) {
@@ -630,7 +656,14 @@ async function extractTokenReferences(node, nodeItem, context) {
       const value = await variableGraph(alias.id);
       if (!value) return;
       // Resolve on the actual consumer: two nodes can use different collection modes.
-      ref.resolvedValue = value.resolveForConsumer(node).value;
+      if (resolvedValues.has(alias.id)) {
+        ref.resolvedValue = resolvedValues.get(alias.id);
+        if (context.profile) context.profile.resolveCacheHits++;
+      } else {
+        if (context.profile) context.profile.resolveCalls++;
+        ref.resolvedValue = value.resolveForConsumer(node).value;
+        resolvedValues.set(alias.id, ref.resolvedValue);
+      }
     } catch (error) { warnings.push(`${property}: ${error.message}`); }
   }
   async function bindings(bound, prefix, range) {
@@ -655,8 +688,11 @@ async function extractTokenReferences(node, nodeItem, context) {
     const tokenId = `style:${id}`;
     references.push({ tokenId, property, ...(range || {}) });
     try {
-      const value = await figma.getStyleByIdAsync(id);
-      if (!value) throw new Error('Style unavailable');
+      const styles = context.tokenStyleCache || (context.tokenStyleCache = new Map());
+      if (!styles.has(id)) styles.set(id, figma.getStyleByIdAsync(id));
+      let value;
+      try { value = await styles.get(id); } catch (error) { styles.delete(id); throw error; }
+      if (!value) { styles.delete(id); throw new Error('Style unavailable'); }
       const entry = { source: 'figma-style', id: value.id, key: value.key, name: value.name, styleType: value.type, description: value.description };
       if (value.type === 'PAINT') entry.paints = value.paints;
       if (value.type === 'TEXT') {
@@ -694,13 +730,367 @@ async function extractTokenReferences(node, nodeItem, context) {
   if (warnings.length) nodeItem.tokenWarnings = [...new Set(warnings)];
 }
 
+// Compare repeated instance descendants before considering reuse.
+function instanceCssKey(node, instances) {
+  try {
+    if (node.type === 'INSTANCE' || !node.id.startsWith('I')) return null;
+    const placement = ancestor => [
+      ancestor.type, ancestor.width, ancestor.height, ancestor.layoutMode,
+      ancestor.layoutPositioning, ancestor.layoutSizingHorizontal,
+      ancestor.layoutSizingVertical, ancestor.layoutAlign, ancestor.layoutGrow
+    ];
+    const chain = [];
+    let instance = node.parent;
+    while (instance && instance.type !== 'INSTANCE') {
+      chain.push(placement(instance));
+      instance = instance.parent;
+    }
+    if (!instance) return null;
+    if (!instances.has(instance.id)) {
+      const master = instance.mainComponent;
+      instances.set(instance.id, master ? [
+        master.id, instance.variantProperties, instance.componentProperties,
+        (instance.overrides || []).map(override => [
+          override.id.replace(instance.id, '').replace(/^I[^;]+;/, ''),
+          [...override.overriddenFields].sort()
+        ]).sort()
+      ] : null);
+    }
+    const identity = instances.get(instance.id);
+    if (!identity) return null;
+    return JSON.stringify([
+      identity, node.id.split(';').at(-1), placement(node), chain,
+      placement(instance), instance.parent ? placement(instance.parent) : null,
+      node.relativeTransform, Object.entries(node.resolvedVariableModes || {}).sort(),
+      node.boundVariables, node.fills, node.strokes, node.opacity,
+      node.strokeWeight, node.strokeTopWeight, node.strokeRightWeight,
+      node.strokeBottomWeight, node.strokeLeftWeight, node.strokeAlign,
+      node.strokeCap, node.strokeJoin, node.strokeMiterLimit, node.dashPattern,
+      node.type === 'TEXT' ? [node.characters, node.textStyleId] : null
+    ]);
+  } catch {
+    return null;
+  }
+}
+
+function generateSimpleNativeCss(node) {
+  if (node.type !== "FRAME" && node.type !== "RECTANGLE") return null;
+  const parent = node.parent;
+  if (!parent || !["HORIZONTAL", "VERTICAL"].includes(parent.layoutMode) ||
+      node.layoutPositioning !== "AUTO" || node.layoutSizingVertical !== "FIXED" ||
+      node.visible === false || node.isMask || node.opacity !== 1 || node.rotation !== 0 ||
+      !["NORMAL", "PASS_THROUGH"].includes(node.blendMode) ||
+      node.children?.length || (node.type === "FRAME" && node.layoutMode !== "NONE") ||
+      !Array.isArray(node.strokes) || node.strokes.length ||
+      !Array.isArray(node.effects) || node.effects.length ||
+      node.fillStyleId !== "" || node.strokeStyleId !== "" ||
+      Object.keys(node.boundVariables || {}).length ||
+      node.topLeftRadius !== 0 || node.topRightRadius !== 0 ||
+      node.bottomLeftRadius !== 0 || node.bottomRightRadius !== 0 ||
+      [node.minWidth, node.maxWidth, node.minHeight, node.maxHeight].some(value => value != null) ||
+      !Array.isArray(node.fills)) return null;
+  const px = value => `${Math.round(value * 100) / 100}px`;
+  if (node.type === "FRAME" && node.fills.length === 0 &&
+      parent.layoutMode === "HORIZONTAL" && node.layoutSizingHorizontal === "FILL" &&
+      node.layoutGrow === 1) return { height: px(node.height), flex: "1 0 0" };
+  if (node.type !== "RECTANGLE" || node.layoutSizingHorizontal !== "FIXED" ||
+      node.layoutGrow !== 0 || node.layoutAlign === "STRETCH" || node.fills.length !== 1) return null;
+  const paint = node.fills[0];
+  if (paint.type !== "SOLID" || paint.visible === false || paint.opacity !== 1 ||
+      paint.blendMode !== "NORMAL" || Object.keys(paint.boundVariables || {}).length) return null;
+  const background = "#" + [paint.color.r, paint.color.g, paint.color.b]
+    .map(channel => Math.round(channel * 255).toString(16).padStart(2, "0")).join("").toUpperCase();
+  return { width: px(node.width), height: px(node.height), background };
+}
+
+// Prefetch CSS only; extraction and asset rendering still commit in scene order.
+function createNativeCssReader(root, profile = null, screenshot = null, instanceMode = "verify", generatedMode = "off") {
+  function* nodes(node) {
+    yield node;
+    if ('children' in node) for (const child of node.children) {
+      if (child.visible !== false) yield* nodes(child);
+    }
+  }
+  const iterator = nodes(root), pending = new Map();
+  let disabled = false;
+  const instances = new Map(), groups = new Map(), cached = new Map();
+  const fetchCss = node => Promise.resolve().then(async () => {
+    if (!('getCSSAsync' in node)) return {};
+    const generated = !disabled && generatedMode !== "off" ? generateSimpleNativeCss(node) : null;
+    if (generated && generatedMode === "use") {
+      profile.generatedCssUses = (profile.generatedCssUses || 0) + 1;
+      return generated;
+    }
+    const key = !disabled && profile && instanceMode !== "off" && instanceCssKey(node, instances);
+    if (key && instanceMode === "reuse" && cached.has(key)) {
+      profile.instanceCssCacheHits = (profile.instanceCssCacheHits || 0) + 1;
+      return cached.get(key);
+    }
+    const start = Date.now();
+    if (profile) profile.cssApiCalls = (profile.cssApiCalls || 0) + 1;
+    try {
+      const css = await node.getCSSAsync();
+      if (generated) {
+        const counter = JSON.stringify(generated) === JSON.stringify(css)
+          ? "generatedCssMatches" : "generatedCssMismatches";
+        profile[counter] = (profile[counter] || 0) + 1;
+        if (counter === "generatedCssMismatches") {
+          const samples = profile.generatedCssSamples ||= [];
+          if (samples.length < 5) samples.push({ nodeId: node.id, type: node.type, generated, native: css });
+        }
+      }
+      if (key && instanceMode === "reuse") cached.set(key, css);
+      if (key && instanceMode === "verify") {
+        const signature = JSON.stringify(Object.entries(css).sort());
+        const group = groups.get(key);
+        if (!group) {
+          groups.set(key, { signature, repeats: 0, consistent: true, nodeId: node.id });
+          profile.instanceCssGroups = groups.size;
+        } else {
+          group.repeats++;
+          if (group.consistent && signature !== group.signature) {
+            group.consistent = false;
+            const previous = Object.fromEntries(JSON.parse(group.signature));
+            const differences = [...new Set([...Object.keys(previous), ...Object.keys(css)])]
+              .filter(property => previous[property] !== css[property]);
+            const conflicts = profile.instanceCssConflictSamples ||= [];
+            if (conflicts.length < 20) conflicts.push({
+              firstNodeId: group.nodeId, nodeId: node.id, type: node.type, differences
+            });
+            profile.instanceCssReusable = (profile.instanceCssReusable || 0) - (group.repeats - 1);
+            profile.instanceCssConflictingGroups = (profile.instanceCssConflictingGroups || 0) + 1;
+          }
+          if (group.consistent) profile.instanceCssReusable = (profile.instanceCssReusable || 0) + 1;
+          profile.instanceCssRepeated = (profile.instanceCssRepeated || 0) + 1;
+        }
+      }
+      return css;
+    }
+    catch { if (profile) profile.cssApiFailures = (profile.cssApiFailures || 0) + 1; return {}; }
+    finally { if (profile) profile.cssApiElapsedMs = (profile.cssApiElapsedMs || 0) + Date.now() - start; }
+  });
+  function fill() {
+    while (pending.size < 4) {
+      const next = iterator.next();
+      if (next.done) break;
+      pending.set(next.value.id, fetchCss(next.value));
+    }
+  }
+  let warming;
+  if (screenshot) {
+    let rendering = true;
+    const stop = () => { rendering = false; };
+    screenshot.then(stop, stop);
+    warming = (async () => {
+      while (rendering && pending.size < 64) {
+        const batch = [];
+        for (let index = 0; index < 4; index++) {
+          const next = iterator.next();
+          if (next.done) break;
+          const request = fetchCss(next.value);
+          pending.set(next.value.id, request);
+          batch.push(request);
+        }
+        if (!batch.length) break;
+        await Promise.all(batch);
+      }
+    })().catch(() => { disabled = true; });
+  }
+  return async node => {
+    if (warming) { await warming; warming = null; }
+    if (disabled) return fetchCss(node);
+    fill();
+    if (!pending.has(node.id)) {
+      // An edit can change traversal while exporting; fall back to sequential reads.
+      await Promise.all(pending.values());
+      pending.clear();disabled = true;
+      return fetchCss(node);
+    }
+    const css = await pending.get(node.id);
+    pending.delete(node.id);
+    fill();
+    return css;
+  };
+}
+
+// Only plain, untransformed solid circles qualify; everything else uses native export.
+function circleSvgCacheKey(node, nodeItem, reasons = null, legacy = false) {
+  const reject = reason => { if (reasons) reasons[reason] = (reasons[reason] || 0) + 1; return null; };
+  try {
+    if (node.type !== 'ELLIPSE') return reject('not-ellipse');
+    if (!(node.width > 0) || node.width !== node.height) return reject('not-circle');
+    if (node.opacity !== 1 || node.isMask || !['PASS_THROUGH','NORMAL'].includes(node.blendMode)) return reject('opacity-mask-blend');
+    if (node.effects.length || node.strokes.length || node.dashPattern.length) return reject('effects-strokes-dashes');
+    const arc = node.arcData;
+    // Native angles can be float32; only accept a full circle, never a partial arc.
+    const fullTurn = arc && (legacy ? Math.abs(arc.endingAngle - 2 * Math.PI) <= 1e-10 : [2 * Math.PI, Math.fround(2 * Math.PI)].includes(arc.endingAngle));
+    if (!arc || arc.startingAngle !== 0 || !fullTurn || arc.innerRadius !== 0) return reject('arc-not-full-circle');
+    const t = node.relativeTransform;
+    if (t[0][0] !== 1 || t[0][1] !== 0 || t[1][0] !== 0 || t[1][1] !== 1) return reject('transform');
+    if (!Array.isArray(node.fills) || node.fills.length !== 1) return reject('fill-count');
+    const paint = node.fills[0];
+    if (paint.type !== 'SOLID' || paint.visible === false || paint.blendMode !== 'NORMAL') return reject('fill-not-solid-normal');
+    if (nodeItem.tokenWarnings?.length) return reject('token-warning');
+    const resolved = (nodeItem.tokenReferences || []).filter(ref => ref.property.startsWith('fills[')).map(ref => ({property:ref.property,value:ref.resolvedValue}));
+    if (resolved.some(ref => ref.value === undefined)) return reject('unresolved-fill-token');
+    return JSON.stringify({width:node.width,arc,fill:paint,resolved});
+  } catch { return reject('property-unavailable'); }
+}
+
+// Narrow icon class validated against native SVG; context-sensitive output stays uncached.
+async function boundIconFingerprint(root, context) {
+  const reject = reason => { if (context.profile) { const reasons=context.profile.boundIconRejections;reasons[reason]=(reasons[reason]||0)+1; } return null; };
+  if (!['chevron-down','chevron-left','chevron-right','info-circle'].includes(root.name)) return null;
+  try {
+    if (!(root.width>0 && root.width<=32 && root.height>0 && root.height<=32)) throw new Error('size');
+    let count=0;
+    async function bindings(value,node) {
+      if (Array.isArray(value)) return Promise.all(value.map(x=>bindings(x,node)));
+      if (value && typeof value==='object') {
+        if(value.type==='VARIABLE_ALIAS') {
+          const cache=context.boundIconState.variables;
+          if(!cache.has(value.id)) {
+            const variable=await figma.variables.getVariableByIdAsync(value.id);
+            if(!variable) throw new Error('variable-unavailable');
+            cache.set(value.id,variable);
+          }
+          const resolved=cache.get(value.id).resolveForConsumer(node).value;
+          if(resolved===undefined || resolved?.type==='VARIABLE_ALIAS') throw new Error('variable-unresolved');
+          return {id:value.id,value:resolved};
+        }
+        const entries=[];
+        for(const key of Object.keys(value).sort())entries.push([key,await bindings(value[key],node)]);
+        return Object.fromEntries(entries);
+      }
+      if(typeof value==='symbol')throw new Error('mixed');
+      return value;
+    }
+    async function shape(node,top) {
+      if(++count>24)throw new Error('complexity');
+      if(!['INSTANCE','COMPONENT','FRAME','VECTOR','LINE','ELLIPSE','RECTANGLE'].includes(node.type) || !top && ['INSTANCE','COMPONENT'].includes(node.type))throw new Error('type');
+      if(node.effects.length || node.isMask || node.opacity!==1 || !['NORMAL','PASS_THROUGH'].includes(node.blendMode))throw new Error('effects-mask-opacity');
+      if(Object.keys(node.boundVariables||{}).some(key=>!['fills','strokes'].includes(key)))throw new Error('non-paint-binding');
+      for(const paint of [...node.fills,...node.strokes]) {
+        if(paint.type!=='SOLID' || paint.blendMode!=='NORMAL')throw new Error('paint');
+        if(Object.keys(paint.boundVariables||{}).some(key=>key!=='color'))throw new Error('non-color-binding');
+      }
+      const result={};
+      const fields=['type','name','width','height','fills','strokes','strokeWeight','strokeAlign','strokeCap','strokeJoin','strokeMiterLimit','strokeTopWeight','strokeBottomWeight','strokeLeftWeight','strokeRightWeight','dashPattern','cornerRadius','cornerSmoothing','topLeftRadius','topRightRadius','bottomLeftRadius','bottomRightRadius','arcData','clipsContent','vectorPaths','vectorNetwork','boundVariables'];
+      for(const key of fields) {const value=node[key];if(value!==undefined)result[key]=await bindings(value,node);}
+      if(node.type==='VECTOR' && (!Array.isArray(node.vectorPaths)||!node.vectorNetwork))throw new Error('vector-geometry');
+      const t=node.relativeTransform;result.transform=top?[[t[0][0],t[0][1],0],[t[1][0],t[1][1],0]]:t;
+      if(node.children) {result.children=[];for(const child of node.children)if(child.visible!==false)result.children.push(await shape(child,false));}
+      return result;
+    }
+    return JSON.stringify(await shape(root,true));
+  } catch(error) {return reject(error.message||'property');}
+}
+
+function observeBoundIcon(key, code, context) {
+  if (!key || !context.boundIconState) return;
+  const state=context.boundIconState, profile=context.profile;
+  profile.boundIconEligible++;
+  if (!code.includes('<svg') || /\bid=|url\(|href=/.test(code)) {
+    profile.boundIconRejections['context-sensitive-output']=(profile.boundIconRejections['context-sensitive-output']||0)+1;return;
+  }
+  if(state.outputs.has(key)) {
+    profile.boundIconShadowMatches += state.outputs.get(key)===code ? 1 : 0;
+    profile.boundIconShadowMismatches += state.outputs.get(key)!==code ? 1 : 0;
+  } else if(state.outputs.size<256) {state.outputs.set(key,code);profile.boundIconUnique++;}
+}
+
+async function readOriginalImage(imageHash, context) {
+  const owner = context.imageContext || context;
+  const cache = owner.originalImageCache || (owner.originalImageCache = new Map());
+  if (cache.has(imageHash)) {
+    if (context.profile) context.profile.imageCacheHits++;
+    return cache.get(imageHash);
+  }
+  if (context.profile) context.profile.imageSourceReads++;
+  const image = figma.getImageByHash(imageHash);
+  if (!image) throw new Error('Image unavailable');
+  const bytes = await measured(context.profile, 'assetRenderMs', () => image.getBytesAsync());
+  const size = await measured(context.profile, 'assetRenderMs', () => image.getSizeAsync());
+  const result = { format:imageFormat(bytes), size, base64:bufferToBase64(bytes,context.profile) };
+  // Bound retained encoded data during large exports. Eviction affects speed only.
+  if (result.base64.length <= 16 * 1024 * 1024) {
+    while (cache.size && (owner.originalImageCacheChars || 0) + result.base64.length > 16 * 1024 * 1024) {
+      const first = cache.keys().next().value;
+      owner.originalImageCacheChars -= cache.get(first).base64.length;cache.delete(first);
+    }
+    cache.set(imageHash,result);owner.originalImageCacheChars = (owner.originalImageCacheChars || 0) + result.base64.length;
+  }
+  return result;
+}
+
+async function exportSvg(node, nodeItem, context) {
+  if (context.profile) {
+    context.profile.svgLegacyRejections ||= {};context.profile.svgRejections ||= {};
+    circleSvgCacheKey(node,nodeItem,context.profile.svgLegacyRejections,true);
+  }
+  const key = circleSvgCacheKey(node, nodeItem, context.profile?.svgRejections);
+  const cache = context.circleSvgCache;
+  if (key && cache?.has(key)) {
+    if (context.profile) context.profile.svgCacheHits++;
+    return cache.get(key);
+  }
+  const iconKey = context.boundIconState ? await measured(context.profile,'boundIconFingerprintMs',()=>boundIconFingerprint(node,context)) : null;
+  if (iconKey && context.boundIconState.reuse && context.boundIconState.outputs.has(iconKey)) {
+    context.profile.boundIconCacheHits++;
+    context.profile.boundIconEligible++;
+    context.profile.svgCacheHits++;
+    return context.boundIconState.outputs.get(iconKey);
+  }
+  if (context.profile) context.profile.svgRenderCalls++;
+  const code = decodeUtf8(await measured(context.profile, 'assetRenderMs', () => node.exportAsync({format:'SVG'})));
+  observeBoundIcon(iconKey,code,context);
+  // Cache only successful self-contained SVGs; IDs/references can be context-sensitive.
+  if (key && cache && code.includes('<svg') && !/\bid=|url\(|href=/.test(code)) {
+    if (cache.size >= 256) cache.delete(cache.keys().next().value);
+    cache.set(key, code);
+  }
+  else if (key && context.profile) context.profile.svgRejections['context-sensitive-output'] = (context.profile.svgRejections['context-sensitive-output'] || 0) + 1;
+  return code;
+}
+
+// Diagnostic similarity only, never a cache key or a claim of render equivalence.
+function recordReuseDiagnostic(node, item, nativeCss, context, parent) {
+  if (!context.profile) return;
+  const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key,canonical(value[key])])) : value;
+  const maps = context.reuseDiagnosticMaps || (context.reuseDiagnosticMaps = {css:new Map(),component:new Map()});
+  const diagnostics = context.profile.reuseDiagnostic || (context.profile.reuseDiagnostic = {cssNodes:0,componentNodes:0,droppedGroups:0});
+  function record(kind, value) {
+    const key = JSON.stringify(canonical(value)), groups=maps[kind];
+    const previous=groups.get(key);
+    if (previous) previous.count++;
+    else if (groups.size < 4096) groups.set(key,{count:1,type:node.type,name:node.name});
+    else diagnostics.droppedGroups++;
+  }
+  diagnostics.cssNodes++;
+  const consumer={width:node.width,height:node.height,layoutPositioning:node.layoutPositioning,layoutSizingHorizontal:node.layoutSizingHorizontal,layoutSizingVertical:node.layoutSizingVertical,parentType:parent?.type,parentWidth:parent?.width,parentHeight:parent?.height,parentLayout:parent?.layoutMode};
+  record('css',{type:node.type,css:nativeCss,consumer});
+  if (item.component?.isSharedComponent) {
+    diagnostics.componentNodes++;
+    record('component',{master:item.component.masterComponentId,variant:item.component.variantProperties,props:item.component.componentProperties,css:nativeCss,consumer,text:item.component.inferredTextProps?.map(x=>({name:x.nodeName,value:x.value})),resolved:item.tokenReferences?.filter(x=>'resolvedValue' in x).map(x=>({property:x.property,value:x.resolvedValue})),childCount:node.children?.length});
+  }
+}
+
+function finishReuseDiagnostic(context) {
+  if (!context.profile || !context.reuseDiagnosticMaps) return;
+  const diagnostic=context.profile.reuseDiagnostic;
+  for (const [kind,map] of Object.entries(context.reuseDiagnosticMaps)) {
+    const entries=[...map.values()];
+    diagnostic[kind]={groups:entries.length,repeatedUsages:entries.reduce((sum,x)=>sum+x.count-1,0),topGroups:entries.sort((a,b)=>b.count-a.count).slice(0,10)};
+  }
+  delete context.reuseDiagnosticMaps;
+}
+
 // Deep recursive DOM Tree Extractor
 async function extractDetailedNodeTree(node, context, parentNode = null, metadataOnly = false) {
   let nativeCss = {};
-  if ("getCSSAsync" in node) {
-    try {
-      nativeCss = await node.getCSSAsync();
-    } catch (e) {}
+  if (!context.mobileOnly) {
+    const readCss = context.readNativeCss || (context.readNativeCss = createNativeCssReader(node, context.profile, null, "off", context.generatedCssMode));
+    nativeCss = await measured(context.profile, 'cssWaitMs', () => readCss(node));
   }
 
   const computedCss = await computeFullCSS(node, nativeCss, parentNode);
@@ -710,7 +1100,7 @@ async function extractDetailedNodeTree(node, context, parentNode = null, metadat
     id: node.id,
     name: node.name,
     type: node.type,
-    semanticTag: semanticTag,
+    ...(!context.mobileOnly ? { semanticTag } : {}),
     visible: node.visible !== false,
     bounds: {
       width: Math.round(node.width * 100) / 100,
@@ -719,13 +1109,34 @@ async function extractDetailedNodeTree(node, context, parentNode = null, metadat
       y: Math.round(node.y * 100) / 100
     },
     layoutFlow: ("layoutPositioning" in node && node.layoutPositioning === "ABSOLUTE") ? "absolute" : "in-flow",
-    css: computedCss,
-    cssString: formatCssBlock(computedCss)
+    ...(!context.mobileOnly ? { css: computedCss, cssString: formatCssBlock(computedCss) } : {})
   };
 
   try {
     if (node.componentPropertyReferences) nodeItem.componentPropertyReferences = node.componentPropertyReferences;
   } catch (error) { nodeItem.componentPropertyWarning = error.message; }
+
+  if (context.platform && context.platform !== "web") {
+    nodeItem.native = {
+      constraints: node.constraints,
+      horizontalSizing: node.layoutSizingHorizontal,
+      verticalSizing: node.layoutSizingVertical,
+      layoutAlign: node.layoutAlign,
+      layoutGrow: node.layoutGrow,
+      layoutWrap: node.layoutWrap,
+      counterAxisSpacing: node.counterAxisSpacing,
+      minWidth: node.minWidth, maxWidth: node.maxWidth,
+      minHeight: node.minHeight, maxHeight: node.maxHeight,
+      clipsContent: node.clipsContent,
+      opacity: node.opacity,
+      rotation: node.rotation,
+      cornerRadii: [node.topLeftRadius, node.topRightRadius, node.bottomRightRadius, node.bottomLeftRadius],
+      fills: Array.isArray(node.fills) ? node.fills : undefined,
+      effects: node.effects,
+      textAutoResize: node.textAutoResize,
+      textAlignVertical: node.textAlignVertical
+    };
+  }
 
   const strokeInfo = inspectStrokes(node);
   if (strokeInfo) nodeItem.stroke = strokeInfo;
@@ -733,14 +1144,14 @@ async function extractDetailedNodeTree(node, context, parentNode = null, metadat
   const gradients = Array.isArray(node.fills) ? node.fills.filter(fill => fill.visible !== false && fill.type.startsWith('GRADIENT')) : [];
   if (gradients.length) {
     nodeItem.gradientFills = gradients;
-    if (!nativeCss.background && !nativeCss['background-image'] && !(node.type === 'TEXT' && nativeCss.color)) {
+    if (!context.mobileOnly && !nativeCss.background && !nativeCss['background-image'] && !(node.type === 'TEXT' && nativeCss.color)) {
       nodeItem.cssWarnings = ['Gradient geometry is preserved in gradientFills; native gradient CSS was unavailable. Use the screenshot or asset rather than guessing a CSS gradient.'];
     }
   }
 
   // 1. REUSABLE COMPONENT IDENTIFICATION
   if (node.type === "INSTANCE") {
-    const compInfo = inspectComponentInstance(node);
+    const compInfo = inspectComponentInstance(node, context);
     if (compInfo) {
       nodeItem.component = compInfo;
 
@@ -779,7 +1190,7 @@ async function extractDetailedNodeTree(node, context, parentNode = null, metadat
           props: compInfo.componentProperties,
           propertySource: compInfo.propertySource,
           inferredTextProps: compInfo.inferredTextProps,
-          recommendedSnippet: compInfo.recommendedUsage
+          ...(!context.mobileOnly ? { recommendedSnippet: compInfo.recommendedUsage } : {})
         });
       }
     }
@@ -837,7 +1248,7 @@ async function extractDetailedNodeTree(node, context, parentNode = null, metadat
       lineHeight: node.lineHeight === figma.mixed ? "mixed" : node.lineHeight || { unit: "AUTO" },
       letterSpacing: node.letterSpacing === figma.mixed ? "mixed" : node.letterSpacing || { unit: "PIXELS", value: 0 },
       textAlign: node.textAlignHorizontal || "LEFT",
-      color: computedCss.color || "#101828"
+      ...(computedCss.color || !context.mobileOnly ? { color: computedCss.color || "#101828" } : {})
     };
     nodeItem.typography = typo;
     // Always segment: color/decoration can differ even with uniform font metrics.
@@ -857,10 +1268,12 @@ async function extractDetailedNodeTree(node, context, parentNode = null, metadat
   }
 
   try {
-    await extractTokenReferences(node, nodeItem, context);
+    await measured(context.profile, 'tokenMs', () => extractTokenReferences(node, nodeItem, context));
   } catch (error) {
     nodeItem.tokenWarnings = [...(nodeItem.tokenWarnings || []), `Token metadata incomplete: ${error.message}`];
   }
+
+  if (!context.mobileOnly) recordReuseDiagnostic(node,nodeItem,nativeCss,context,parentNode);
 
   // 4. COLOR & EFFECT TOKENS
   if (computedCss["background-color"]) context.designTokens.colors[computedCss["background-color"]] = true;
@@ -890,8 +1303,7 @@ async function extractDetailedNodeTree(node, context, parentNode = null, metadat
 
   if (!metadataOnly && shouldExportAsSvg && node.width > 0 && node.height > 0) {
     try {
-      const svgBytes = await node.exportAsync({ format: "SVG" });
-      const svgCode = decodeUtf8(svgBytes);
+      const svgCode = await exportSvg(node, nodeItem, context);
 
       if (svgCode && svgCode.includes("<svg")) {
         const assetFileName = `assets/${sanitizeFilename(node.name)}_${sanitizeFilename(node.id.replace(":", "_"))}.svg`;
@@ -912,7 +1324,7 @@ async function extractDetailedNodeTree(node, context, parentNode = null, metadat
       }
     } catch (e) {
       try {
-        const svgCode = await node.exportAsync({ format: "SVG_STRING" });
+        const svgCode = await measured(context.profile, 'assetRenderMs', () => node.exportAsync({ format: 'SVG_STRING' }));
         if (typeof svgCode === "string" && svgCode.includes("<svg")) {
           const assetFileName = `assets/${sanitizeFilename(node.name)}_${sanitizeFilename(node.id.replace(":", "_"))}.svg`;
           context.assets.push({
@@ -943,14 +1355,12 @@ async function extractDetailedNodeTree(node, context, parentNode = null, metadat
       const imageFill = { index, ...fill, nodeSize: { width: node.width, height: node.height } };
       nodeItem.imageFills.push(imageFill);
       try {
-        const img = figma.getImageByHash(fill.imageHash);
-        if (!img) throw new Error('Image unavailable');
-        const bytes = await img.getBytesAsync();
-        const format = imageFormat(bytes);
+        const original = await readOriginalImage(fill.imageHash, context);
+        const format = original.format;
         const assetFileName = `assets/img_${sanitizeFilename(node.name)}_${fill.imageHash}.${format.extension}`;
         imageFill.asset = assetFileName;
-        imageFill.sourceSize = await img.getSizeAsync();
-        context.assets.push({ name: assetFileName, type: 'base64', content: bufferToBase64(bytes) });
+        imageFill.sourceSize = original.size;
+        context.assets.push({ name: assetFileName, type: 'base64', content: original.base64 });
         context.assetsManifest.push({
           filename: assetFileName, format: format.name, nodeId: node.id, nodeName: node.name,
           dimensions: `${imageFill.sourceSize.width}×${imageFill.sourceSize.height}px`,
@@ -972,11 +1382,11 @@ async function extractDetailedNodeTree(node, context, parentNode = null, metadat
 
   if (!metadataOnly && isImageNode && !nodeItem.assetImage) {
     try {
-      const pngBytes = await node.exportAsync({
+      const pngBytes = await measured(context.profile, 'assetRenderMs', () => node.exportAsync({
         format: "PNG",
         constraint: { type: "SCALE", value: 2 }
-      });
-      const b64 = bufferToBase64(pngBytes);
+      }));
+      const b64 = bufferToBase64(pngBytes, context.profile);
       const assetFileName = `assets/${sanitizeFilename(node.name)}_${sanitizeFilename(node.id.replace(":", "_"))}.png`;
       context.assets.push({
         name: assetFileName,
@@ -1186,11 +1596,19 @@ function checkScreen(identity, snapshot) {
 
 // Process individual screen/frame
 async function exportScreenNode(node, currentPath, scale) {
+  const platform = exportProfile.platform;
+  const mobileOnly = platform !== "web" && platform !== "all";
   const screenPath = [...currentPath, node.name];
+  const step = value => sendUI({ type: "EXPORT_STEP", screen: node.name, step: value });
+  step("checking");
   const identity = exportIdentity(node);
+  const profile = { nodeId:node.id, name:node.name, snapshotCheckMs:0, screenshotRenderMs:0, screenshotEncodeMs:0, extractionMs:0, cssWaitMs:0, tokenMs:0, assetRenderMs:0, assetEncodeMs:0, serializeMs:0, uploadAckMs:0, resolveCalls:0, resolveCacheHits:0, componentMs:0, componentMetadataReads:0, componentCacheHits:0, svgRenderCalls:0, svgCacheHits:0, boundIconFingerprintMs:0, boundIconCacheHits:0, boundIconEligible:0, boundIconUnique:0, boundIconShadowMatches:0, boundIconShadowMismatches:0, boundIconRejections:{}, imageSourceReads:0, imageCacheHits:0, svgRejections:{}, svgLegacyRejections:{} };
+  exportProfile.screens.push(profile);
+  let phaseStart = Date.now();
   // JSON_REST captures the resolved subtree before expensive image rendering.
   const snapshot = await node.exportAsync({ format: "JSON_REST_V1" });
-  const check = await checkScreen(identity, JSON.stringify({ version: 5, scale, snapshot }));
+  const check = await checkScreen(identity, JSON.stringify(platform === "web" ? { version: 5, scale, snapshot } : { version: 1, platform, scale, snapshot }));
+  profile.snapshotCheckMs = Date.now() - phaseStart;
   if (!forceExport && check.unchanged) {
     sendUI({ type: "PROGRESS_UPDATE", message: `⏭ Không đổi: ${node.name}` });
     return;
@@ -1198,10 +1616,18 @@ async function exportScreenNode(node, currentPath, scale) {
 
   sendUI({
     type: "PROGRESS_UPDATE",
-    message: `📸 Render ảnh 2x Retina & trích xuất SVGs, Images, CSS 100%: ${node.name}...`
+    message: `📸 Export ${scale}× · ${platform} · ${node.name}…`
   });
 
   const context = {
+    profile,
+    generatedCssMode: exportProfile.generatedCssMode,
+    platform,
+    mobileOnly,
+    componentMetadataCache: exportProfile.componentMetadataCache,
+    circleSvgCache: exportProfile.circleSvgCache,
+    imageContext: exportProfile.imageContext,
+    boundIconState: exportProfile.boundIconState,
     componentsUsed: {},
     fontsUsed: {},
     designTokens: {
@@ -1216,24 +1642,47 @@ async function exportScreenNode(node, currentPath, scale) {
   };
 
   // 1. Export High-Res Screenshot (PNG)
-  const screenshotBytes = await node.exportAsync({
+  step("screenshot");
+  const screenshot = measured(profile, 'screenshotRenderMs', () => node.exportAsync({
     format: "PNG",
     constraint: { type: "SCALE", value: scale }
-  });
+  }));
+  if (!mobileOnly && exportProfile.cssDuringScreenshot) {
+    context.readNativeCss = createNativeCssReader(node, profile, screenshot);
+  }
+  const screenshotBytes = await screenshot;
+  phaseStart = Date.now();
   const screenshotB64 = bufferToBase64(screenshotBytes);
+  profile.screenshotEncodeMs = Date.now() - phaseStart;
 
   // 2. Extract Deep Recursive DOM Tree with Native + Computed CSS, SVGs & Images
-  const detailedTree = await extractDetailedNodeTree(node, context);
+  step("extraction");
+  const detailedTree = await measured(profile, 'extractionMs', () => extractDetailedNodeTree(node, context));
+  finishReuseDiagnostic(context);
+  phaseStart = Date.now();
 
   // 3. Generate Font Guides & Assets Manifest
   const fontGuide = generateFontGuides(context.fontsUsed);
-  const markdownSpec = generateMarkdownDoc(detailedTree, context.componentsUsed, context.designTokens, fontGuide, context.assetsManifest);
+  const markdownSpec = mobileOnly
+    ? `# ${node.name} · ${platform} handoff\n\n![Screenshot](./screenshot.png)\n\nUse [spec.json](./spec.json) for layout, paints and text runs. See [mobile_handoff.json](./mobile_handoff.json) for unit conventions and [assets_manifest.json](./assets_manifest.json) for asset references.\n`
+    : generateMarkdownDoc(detailedTree, context.componentsUsed, context.designTokens, fontGuide, context.assetsManifest);
   const specJson = JSON.stringify(detailedTree, null, 2);
   const componentsJson = JSON.stringify(context.componentsUsed, null, 2);
   const tokensJson = JSON.stringify(context.designTokens, null, 2);
-  const fontGuideJson = JSON.stringify(fontGuide, null, 2);
+  const fontGuideJson = JSON.stringify(mobileOnly ? { fonts: fontGuide.fonts, warning: fontGuide.warning } : fontGuide, null, 2);
+  const mobileHandoff = platform === "web" ? null : {
+    version: 1,
+    platform,
+    designUnits: "Figma design units",
+    screenshotScale: scale,
+    targets: {
+      ...(platform !== "ios" ? { android: { layoutUnit: "dp", textUnit: "sp" } } : {}),
+      ...(platform !== "android" ? { ios: { layoutUnit: "pt", textUnit: "pt" } } : {})
+    },
+    unitMapping: "Confirm the Figma design baseline before mapping to native units. Screenshot scale only applies to pixel density.",
+    assetFormat: "SVG and original or rendered raster files. Convert or import for the target app as needed."
+  };
   const assetsManifestJson = JSON.stringify(context.assetsManifest, null, 2);
-  const snippetsHtml = generateComponentSnippetsHtml(node.name, context.componentsUsed, fontGuide);
 
   // 4. Bundle files to send to Bridge Server
   const filesToUpload = [
@@ -1243,11 +1692,15 @@ async function exportScreenNode(node, currentPath, scale) {
     { name: "components_used.json", type: "text", content: componentsJson },
     { name: "fonts_guide.json", type: "text", content: fontGuideJson },
     { name: "assets_manifest.json", type: "text", content: assetsManifestJson },
-    { name: "component_snippets.html", type: "text", content: snippetsHtml },
+    ...(!mobileOnly ? [{ name: "component_snippets.html", type: "text", content: generateComponentSnippetsHtml(node.name, context.componentsUsed, fontGuide) }] : []),
     { name: "design_tokens.json", type: "text", content: tokensJson },
+    ...(mobileHandoff ? [{ name: "mobile_handoff.json", type: "text", content: JSON.stringify(mobileHandoff, null, 2) }] : []),
     ...context.assets
   ];
 
+  profile.serializeMs = Date.now() - phaseStart;
+  phaseStart = Date.now();
+  step("saving");
   sendUI({
     type: "UPLOAD_SCREEN_BATCH",
     folder_path: screenPath,
@@ -1259,6 +1712,7 @@ async function exportScreenNode(node, currentPath, scale) {
 
   // Await sequential ACK from UI before proceeding to next screen!
   if (!await waitForUploadAck(60000)) throw new Error("Upload failed or timed out; export stopped.");
+  profile.uploadAckMs = Date.now() - phaseStart;
 }
 
 // Recursive section walker
@@ -1297,6 +1751,19 @@ async function processNode(node, currentPath, scale) {
   }
 }
 
+async function waitForExportTarget(nodeId, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    const node = await figma.getNodeByIdAsync(nodeId);
+    if (node) {
+      if (!['SECTION','FRAME','COMPONENT','COMPONENT_SET','INSTANCE'].includes(node.type)) throw new Error('Target node is not an exportable section/frame.');
+      return node;
+    }
+    if (Date.now() >= deadline) throw new Error(`Target ${nodeId} is unavailable after waiting for Figma to load. Verify the file and node URL.`);
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+}
+
 figma.ui.onmessage = async (msg) => {
   if (msg.type === "SET_LANGUAGE") {
     language = msg.language === "en" ? "en" : "vi";
@@ -1308,19 +1775,39 @@ figma.ui.onmessage = async (msg) => {
       currentAckResolver(msg.success);
       currentAckResolver = null;
     }
+  } else if (msg.type === "SET_CLI_PERMISSION") {
+    if (typeof msg.projectId !== 'string' || !msg.projectId) return;
+    const key = 'cliProjects:' + localDocumentId;
+    const projects = await figma.clientStorage.getAsync(key) || [];
+    const next = projects.filter(id => id !== msg.projectId);
+    if (msg.enabled) next.push(msg.projectId);
+    await figma.clientStorage.setAsync(key, next);
   } else if (msg.type === "GET_DOCUMENT") {
-    sendUI({type:"DOCUMENT_ID", documentId:figma.fileKey || localDocumentId});
+    const projects = await figma.clientStorage.getAsync('cliProjects:' + localDocumentId) || [];
+    sendUI({type:'CLI_PERMISSION', projects});
+    sendUI({type:"DOCUMENT_ID", engineRevision:"platform-export-v1", documentId:figma.fileKey || localDocumentId, fileKey:figma.fileKey || null});
   } else if (msg.type === "START_EXPORT") {
     if (activeRunId || typeof msg.runId !== "string" || !msg.runId) return;
     activeRunId = msg.runId;
+    const startedAt = Date.now();
+    exportProfile = { engineRevision:'platform-export-v1', generatedCssMode:msg.generatedCssMode === "use" ? "use" : msg.generatedCssMode === "verify" ? "verify" : "off", screens:[], componentMetadataCache:new Map(), circleSvgCache:new Map(), imageContext:{originalImageCache:new Map()}, boundIconState:{reuse:true,variables:new Map(),outputs:new Map()} };
     try {
+    const platform = msg.platform ?? "web";
+    if (!["web", "android", "ios", "mobile", "all"].includes(platform)) throw new Error("Invalid export platform.");
+    exportProfile.platform = platform;
     forceExport = !!msg.force;
     const scope = msg.scope || "current_page";
     const scale = msg.scale || 2;
 
-    figma.notify(localized("Bắt đầu xuất dữ liệu Pixel-Perfect (SVGs, Images, Fonts, CSS 100%)...","Starting export (assets, fonts and CSS)\u2026"));
+    figma.notify(localized(`Bắt đầu export ${platform}…`, `Starting ${platform} export…`));
 
-    if (scope === "selection") {
+    if (scope === 'target') {
+      if (!msg.target || (figma.fileKey ? msg.target.fileKey !== figma.fileKey : !msg.allowPairedFile)) throw new Error('Target file differs from the paired Figma document.');
+      if (!figma.fileKey) sendUI({type:'PROGRESS_UPDATE',message:'File key unavailable: exporting from the explicitly confirmed paired file.'});
+      const target = await waitForExportTarget(msg.target.nodeId);
+      sendUI({type:'PROGRESS_UPDATE',message:`Target: ${target.name} (${target.id})`});
+      await processNode(target, [], scale);
+    } else if (scope === "selection") {
       const selection = figma.currentPage.selection;
       if (!selection || selection.length === 0) {
         throw new Error(localized("Vui lòng chọn ít nhất 1 mục trên canvas!","Select at least one item on the canvas."));
@@ -1362,12 +1849,15 @@ figma.ui.onmessage = async (msg) => {
       }
     }
 
-    sendUI({
-      type: "EXPORT_FINISHED"
-    });
+    delete exportProfile.componentMetadataCache;
+    delete exportProfile.circleSvgCache;
+    delete exportProfile.imageContext;
+    delete exportProfile.boundIconState;
+    exportProfile.totalMs = Date.now() - startedAt;
+    sendUI({ type: "EXPORT_FINISHED", profile:exportProfile });
     figma.notify(localized("🎉 Đã hoàn tất xuất toàn bộ screens, assets (SVG/PNG) và specs chuẩn xác 100%!","\ud83c\udf89 Export completed."));
     } catch (error) {
-      sendUI({ type: "EXPORT_ERROR", message: error.message });
+      sendUI({ type: "EXPORT_ERROR", message: error.message, profile:exportProfile });
       figma.notify(error.message, { error: true });
     } finally {
       activeRunId = null;

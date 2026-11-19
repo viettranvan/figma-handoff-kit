@@ -21,7 +21,10 @@ Manual Figma Desktop checks using a disposable design copy:
 - Export once, export unchanged again, edit one screen and export again; confirm skipped/updated results.
 - Enable CLI sync, run `figma-handoff sync`, confirm all-page 2× export and terminal counts.
 - Disable CLI sync; a new sync request must fail. Re-enable and verify it works.
-- Close plugin/restart bridge; verify disconnected errors and fresh opt-in.
+- Close/reopen plugin and restart bridge; verify remembered permission reconnects for the same file/project, but not another project.
+- Uncheck CLI permission, reopen plugin and verify it stays revoked.
+- Run URL export with no bridge/plugin; verify bridge ownership, Desktop launch and handshake timeout/fallback.
+- Verify first fileKey-unavailable export requires explicit --paired-file confirmation; subsequent matching URL/document exports reuse the local binding.
 - Confirm outputs survive updates and existing manifests retain stable paths.
 
 Shared library/style changes, large-file memory use and Figma browser local-network/download behavior need real-environment checks. Automated tests do not replace these checks.
@@ -79,7 +82,7 @@ Figma Handoff Kit exports design bundles for development and AI-assisted impleme
 
 **Save to project:** install Node.js 20+, run `npm install -g figma-handoff-kit`, then `figma-handoff start` on the same computer as Figma. Choose your project and output folder in the terminal; confirm them in the plugin. Exports are saved locally, with unchanged screens skipped.
 
-**Sync from terminal:** choose Save to project and enable Allow CLI sync in the plugin. Keep Figma, plugin and bridge open, then run `figma-handoff sync` whenever you want an update. It checks all pages except Trash at 2× and exports new/changed screens. Disable the checkbox to revoke access. Sync does not open Figma or delete obsolete local folders.
+**Sync from terminal:** choose Save to project and enable Allow CLI sync/export in the plugin. Keep Figma, plugin and bridge open, then run `figma-handoff sync` whenever you want an update. It checks all pages except Trash at 2× and exports new/changed screens. Disable the checkbox to revoke access. Sync does not open Figma or delete obsolete local folders.
 
 English and Vietnamese interface. No hosted upload service. File permissions and organization plugin policies apply. ZIP exports render again each time and may use significant memory on large designs.
 

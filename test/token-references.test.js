@@ -76,3 +76,25 @@ test('alias graph includes every mode, missing dependencies and cycles without h
  assert.equal(calls.filter(id=>id==='root').length,1);
  assert.ok(item.tokenWarnings.some(w=>w.includes('missing')));
 });
+
+test('repeated style lookup is cached while consumer-specific variable values stay distinct',async()=>{
+ let calls=0;
+ const style={id:'brand',name:'Brand',type:'PAINT',paints:[{boundVariables:{color:alias('color')}}]};
+ const figma={getStyleByIdAsync:async()=>{calls++;return style;},variables:{getVariableByIdAsync:async()=>({id:'color',valuesByMode:{default:0},resolveForConsumer:node=>({value:node.dark?0:1})})}};
+ const extract=vm.runInNewContext(helper+';extractTokenReferences',{figma});
+ const context={designTokens:{}};const light={},dark={};
+ await extract({fillStyleId:'brand'},light,context);await extract({fillStyleId:'brand',dark:true},dark,context);
+ assert.equal(calls,1);assert.equal(light.tokenReferences[1].resolvedValue,1);assert.equal(dark.tokenReferences[1].resolvedValue,0);
+ assert.equal(context.designTokens.namedTokens['style:brand'].name,'Brand');
+});
+
+test('consumer resolutions are cached per node while references, ranges and distinct node modes remain intact',async()=>{
+ let calls=0;
+ const figma={variables:{getVariableByIdAsync:async()=>({id:'brand',valuesByMode:{default:1},resolveForConsumer:node=>{calls++;return {value:node.dark?0:1};}})}};
+ const extract=vm.runInNewContext(helper+';extractTokenReferences',{figma});const context={designTokens:{},profile:{resolveCalls:0,resolveCacheHits:0}};
+ const first={},second={};
+ const node={boundVariables:{opacity:alias('brand')},fills:[{boundVariables:{color:alias('brand')}}]};
+ await extract(node,first,context);await extract({...node,dark:true},second,context);
+ assert.equal(calls,2);assert.equal(context.profile.resolveCalls,2);assert.equal(context.profile.resolveCacheHits,2);
+ assert.equal(first.tokenReferences.length,2);assert.ok(first.tokenReferences.every(r=>r.resolvedValue===1));assert.ok(second.tokenReferences.every(r=>r.resolvedValue===0));
+});

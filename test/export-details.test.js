@@ -5,9 +5,10 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('../figma-exporter-plugin/code.js', import.meta.url), 'utf8');
 const weightCode = source.slice(source.indexOf('function fontWeightNumber('), source.indexOf('// Semantic HTML'));
 const fontCode = source.slice(source.indexOf('function recordFontUsage('), source.indexOf('// Preserve Figma identities'));
+const imageCode = source.slice(source.indexOf('async function readOriginalImage('),source.indexOf('async function exportSvg('));
 const helpers = vm.runInNewContext(weightCode + fontCode + ';({fontWeightNumber,imageFormat,recordFontUsage,generateFontGuides})');
 test('typography preserves same-size variants, units and direct per-range colors', () => {
- const block = source.slice(source.indexOf('  // 3. TEXT & TYPOGRAPHY'), source.indexOf('  try {\n    await extractTokenReferences'));
+ const block = source.slice(source.indexOf('  // 3. TEXT & TYPOGRAPHY'), source.indexOf('  try {\n    await measured(context.profile,'));
  const context = { fontsUsed: {}, designTokens: { typography: {} } };
  for (const unit of ['PIXELS', 'PERCENT']) {
   const fills = [{ type: 'SOLID', color: { r: 1, g: 0, b: 0 } }];
@@ -38,7 +39,7 @@ test('original JPEG metadata retains crop and actual dimensions instead of masqu
  const block = source.slice(source.indexOf('  // 6a. Preserve original'), source.indexOf('  // 6b.'));
  const fill = { type: 'IMAGE', imageHash: 'fullhash', scaleMode: 'CROP', imageTransform: [[2, 0, -0.5], [0, 2, 0]], opacity: 0.6 };
  const context = { assets: [], assetsManifest: [] }, nodeItem = {};
- const fn = vm.runInNewContext('(async () => {' + block + '})', { ...helpers, metadataOnly: false, node: { id: '1:2', name: 'Avatar', width: 40, height: 40, fills: [fill, { ...fill, visible: false }] }, context, nodeItem, sanitizeFilename: x => x, bufferToBase64: bytes => Buffer.from(bytes).toString('base64'), figma: { getImageByHash: () => ({ getBytesAsync: async () => new Uint8Array([255, 216, 255, 0]), getSizeAsync: async () => ({ width: 800, height: 600 }) }) } });
+ const fn = vm.runInNewContext(imageCode + '(async () => {' + block + '})', { ...helpers, measured:async(profile,key,fn)=>fn(), metadataOnly: false, node: { id: '1:2', name: 'Avatar', width: 40, height: 40, fills: [fill, { ...fill, visible: false }] }, context, nodeItem, sanitizeFilename: x => x, bufferToBase64: bytes => Buffer.from(bytes).toString('base64'), figma: { getImageByHash: () => ({ getBytesAsync: async () => new Uint8Array([255, 216, 255, 0]), getSizeAsync: async () => ({ width: 800, height: 600 }) }) } });
  await fn();
  assert.match(nodeItem.assetImage, /fullhash.jpg$/);
  assert.equal(nodeItem.imageFills.length, 1);
