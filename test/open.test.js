@@ -11,7 +11,7 @@ test('Desktop deep link uses file scheme and preserves section selection', async
  assert.equal(desktopLink('https://www.figma.com/design/abc/Copy?node-id=1-2'), 'figma://file/abc?node-id=1-2');
 });
 
-test('Desktop launch passes URL as an argument and prioritizes the exact native development plugin', async () => {
+test('Desktop launch passes URL as an argument and prioritizes the exact native development plugin', { skip: process.platform !== 'darwin' }, async () => {
  const {openFigma}=await import('../bin/open-figma.js');
  const calls=[];
  await openFigma({figmaUrl:'https://www.figma.com/design/abc/Copy?node-id=1-2'},{foreground:true,run:async(...args)=>{calls.push(args);return {stdout:'launched\n'};}});
@@ -22,7 +22,7 @@ test('Desktop launch passes URL as an argument and prioritizes the exact native 
 
 });
 
-test('foreground launch is explicit and enables Quick Actions fallback', async () => {
+test('foreground launch is explicit and enables Quick Actions fallback', { skip: process.platform !== 'darwin' }, async () => {
  const {openFigma}=await import('../bin/open-figma.js');const calls=[];
  await openFigma({figmaUrl:'https://www.figma.com/design/abc/Copy?node-id=1-2'},{foreground:true,run:async(...args)=>{calls.push(args);return {stdout:'launched'};}});
  assert.equal(calls[0][1].includes('-g'),false);
